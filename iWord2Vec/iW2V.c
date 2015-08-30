@@ -381,13 +381,13 @@ void *TrainModelThread(void *id) {
 	Z_c += exp(-compute_energy(input_word_position, context_word_position, z_hat));
 	// iterate through negatives again to compute probabilities and perform updates
 	for (d = 0; d < negative; d++){
-	  if (neg_samples[d] != 0){
-	    negative_word_position = neg_samples[d] * embed_current_size;
+	  if (neg_samples[d] > 0){
+	    negative_word_position = neg_samples[d] * embed_max_size;
 	    prob_c = exp(-compute_energy(input_word_position, negative_word_position, z_hat)) / Z_c;
 	    for (c = 0; c < z_hat; c++){
 	      // Note: need per-dimension learning rates
 	      context_embed[negative_word_position + c] -= ((alpha * c) / current_embed_size) * prob_c * (input_embed[input_word_position + c] - 2*context_embed[negative_word_position + c]);
-	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - 2*input_embed[input_word_position + c])
+	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - 2*input_embed[input_word_position + c]);
 	    }
 	  } 
 	}
@@ -431,8 +431,8 @@ void TrainModel() {
   fprintf(fo, "%lld %lld\n", vocab_size, layer1_size);
   for (a = 0; a < vocab_size; a++) {
     fprintf(fo, "%s ", vocab[a].word);
-    if (binary) for (b = 0; b < layer1_size; b++) fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fo);
-    else for (b = 0; b < layer1_size; b++) fprintf(fo, "%lf ", syn0[a * layer1_size + b]);
+    // only print the non-zero dimensions
+    (b = 0; b < embed_current_size; b++) fprintf(fo, "%lf ", input_embed[a * embed_max_size + b]);
     fprintf(fo, "\n");
   }
   return -1;
