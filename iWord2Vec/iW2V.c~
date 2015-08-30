@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <random.h>
 
 // Global Variables
 #define MAX_STRING 100
@@ -19,11 +20,11 @@ struct vocab_word {
 char train_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
-int debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1;
+int debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1, dim_penalty = 10;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
 long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0;
-real alpha = 0.025, starting_alpha, sample = 1e-3;
+real alpha = 0.025, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
 clock_t start;
 int negative = 5;
@@ -272,12 +273,19 @@ void InitNet() {
     }
 }
 
+float compute_energy(int w_idx, int c_idx, int z_hat){
+  long long a;
+  real energy = 0.0;
+  for (a = 0; a<z_hat; a++) energy += input_embed[w_idx + a]*context_embed[c_idx + a] - log(dim_penalty) - pow(input_embed[w_idx + a],2) - pow(context_embed[c_idx + a],2);
+  return energy;
+}
+
 void *TrainModelThread(void *id) {
   long long a, b, d, cw, word, last_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
   long long l1, l2, c, target, label, local_iter = iter;
   unsigned long long next_random = (long long)id;
-  real f, g;
+  real f, g, Z_z;
   clock_t now;
   real *input_gradient = (real *)calloc(embed_max_size, sizeof(real));
   real *context_gradient = (real *)calloc(embed_max_size, sizeof(real));
@@ -331,6 +339,7 @@ void *TrainModelThread(void *id) {
     }
     // start of training, get current word (w)
     word = sen[sentence_position];
+    input_word_position = word * embed_max_size;
     if (word == -1) continue;
     for (c = 0; c < embed_current_size + 1; c++) input_gradient[c] = 0; 
     // only iterates to embed_current_size+1 since the gradient can be of larger dimensionality than that
@@ -345,6 +354,15 @@ void *TrainModelThread(void *id) {
 	last_word = sen[c];
 	if (last_word == -1) continue;
 	context_word_position = last_word * embed_max_size;
+	// sample z: z_hat ~ p(z | w, c)
+	real z_probs[embed_current_size+1];
+	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c));
+	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
+	// no need to normalize, function does it for us
+	default_random_engine generator;
+	discrete_distribution<int> multi_dist(z_probs);
+	z_hat = multi_dist(generator);
+  
 	for (c = 0; c < layer1_size; c++) neu1e[c] = 0;
 	// NEGATIVE SAMPLING
 	if (negative > 0) for (d = 0; d < negative + 1; d++) {
@@ -367,9 +385,9 @@ void *TrainModelThread(void *id) {
 	      for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2];
 	      for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * syn0[c + l1];
 	    }
-	  // Learn weights input -> hidden
-	  for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c];
-	}
+	// Learn weights input -> hidden
+	for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c];
+      }
     }
     sentence_position++;
     if (sentence_position >= sentence_length) {
@@ -436,7 +454,11 @@ int main(int argc, char **argv) {
     printf("\t-min-count <int>\n");
     printf("\t\tThis will discard words that appear less than <int> times; default is 5\n");
     printf("\t-alpha <float>\n");
-    printf("\t\tSet the starting learning rate; default is 0.025 for skip-gram and 0.05 fbinary moded; default is 0 (off)\n");
+    printf("\t\tSet the starting learning rate; default is 0.025.\n");
+    printf("\t-dimPenalty <int>\n");
+    printf("\t\tPenalty incurred for using each embedding dimension.  Must be in (1, infinity) to guarantee convergent Z. default=5.\n");
+    printf("\t-sparsityWeight <float>\n");
+    printf("\t\tWeight placed on L-2 sparsity penalty.  default = 0.001.\n");
     printf("\t-save-vocab <file>\n");
     printf("\t\tThe vocabulary will be saved to <file>\n");
     printf("\t-read-vocab <file>\n");
@@ -456,6 +478,8 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
   if (cbow) alpha = 0.05;
   if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-dimPenalty", argc, argv)) > 0) dim_penalty = atoi(argv[i+1]);
+  if ((i = ArgPos((char *)"-sparsityWeight", argc, argv)) > 0) sparsity_weight = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);

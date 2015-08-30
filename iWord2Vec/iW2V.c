@@ -357,7 +357,7 @@ void *TrainModelThread(void *id) {
 	// sample z: z_hat ~ p(z | w, c)
 	real z_probs[embed_current_size+1];
 	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c));
-	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
+	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size-1));
 	// no need to normalize, function does it for us
 	default_random_engine generator;
 	discrete_distribution<int> multi_dist(z_probs);
