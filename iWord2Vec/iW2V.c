@@ -273,7 +273,7 @@ void InitNet() {
     }
 }
 
-float compute_energy(int w_idx, int c_idx, int z_hat){
+float compute_energy(long long w_idx, long long c_idx, int z){
   long long a;
   real energy = 0.0;
   for (a = 0; a<z_hat; a++) energy += input_embed[w_idx + a]*context_embed[c_idx + a] - log(dim_penalty) - pow(input_embed[w_idx + a],2) - pow(context_embed[c_idx + a],2);
