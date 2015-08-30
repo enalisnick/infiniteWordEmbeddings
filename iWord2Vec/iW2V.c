@@ -276,7 +276,7 @@ void InitNet() {
 float compute_energy(long long w_idx, long long c_idx, int z){
   long long a;
   real energy = 0.0;
-  for (a = 0; a<z_hat; a++) energy += input_embed[w_idx + a]*context_embed[c_idx + a] - log(dim_penalty) - pow(input_embed[w_idx + a],2) - pow(context_embed[c_idx + a],2);
+  for (a = 0; a<z; a++) energy += input_embed[w_idx + a]*context_embed[c_idx + a] - log(dim_penalty) - pow(input_embed[w_idx + a],2) - pow(context_embed[c_idx + a],2);
   return energy;
 }
 
@@ -362,33 +362,44 @@ void *TrainModelThread(void *id) {
 	default_random_engine generator;
 	discrete_distribution<int> multi_dist(z_probs);
 	z_hat = multi_dist(generator);
-  
+	// if we sampled z = l+1, increase the number of dimensions
+	if (z_hat == embed_current_size) embed_current_size++;
 	for (c = 0; c < layer1_size; c++) neu1e[c] = 0;
 	// NEGATIVE SAMPLING
-	if (negative > 0) for (d = 0; d < negative + 1; d++) {
-	    if (d == 0) {
-	      target = word;
-	      label = 1;
-	    } else {
-	      next_random = next_random * (unsigned long long)25214903917 + 11;
-	      target = table[(next_random >> 16) % table_size];
-	      if (target == 0) target = next_random % (vocab_size - 1) + 1;
-	      if (target == word) continue;
-	      label = 0;
+	Z_c = 0.0;
+	// need to iterate through the negatives once to compute partition function
+	for (d = 0; d < negative; d++) {
+	    next_random = next_random * (unsigned long long)25214903917 + 11;
+	    negative_word = table[(next_random >> 16) % table_size];
+	    if (negative_word == 0) negative_word = next_random % (vocab_size - 1) + 1;
+	    if (negative_word == word) continue; // need to initialize to zeros so this line doesn't fuck up
+	    neg_samples[d] = negative_word;
+	    negative_word_position = negative_word * embed_max_size;
+	    Z_c += exp(-compute_energy(input_word_position, negative_word_position, z_hat));
+	  }
+	// now add the positive example to Z_c
+	Z_c += exp(-compute_energy(input_word_position, context_word_position, z_hat));
+	// iterate through negatives again to compute probabilities and perform updates
+	for (d = 0; d < negative; d++){
+	  if (neg_samples[d] != 0){
+	    negative_word_position = neg_samples[d] * embed_current_size;
+	    prob_c = exp(-compute_energy(input_word_position, negative_word_position, z_hat)) / Z_c;
+	    for (c = 0; c < z_hat; c++){
+	      // Note: need per-dimension learning rates
+	      context_embed[negative_word_position + c] -= ((alpha * c) / current_embed_size) * prob_c * (input_embed[input_word_position + c] - 2*context_embed[negative_word_position + c]);
+	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - 2*input_embed[input_word_position + c])
 	    }
-	    l2 = target * layer1_size;
-	    f = 0;
-	      for (c = 0; c < layer1_size; c++) f += syn0[c + l1] * syn1neg[c + l2];
-	      if (f > MAX_EXP) g = (label - 1) * alpha;
-	      else if (f < -MAX_EXP) g = (label - 0) * alpha;
-	      else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
-	      for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2];
-	      for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * syn0[c + l1];
-	    }
-	// Learn weights input -> hidden
-	for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c];
+	  } 
+	}
+	// update positive context and add to accumulator
+	prob_c = exp(-compute_energy(input_word_position, context_word_position, z_hat)) / Z_c;
+	for (c = 0; c < z_hat; c++){
+	  context_embed[context_word_position + c] -= ((alpha * c) / current_embed_size) * (prob_c - 1.0) * (input_embed[input_word_podition + c] - 2*context_embed[context_word_position + c]);
+	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - 2*input_embed[input_word_position + c]);
+	}
+	// update input word
+	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= ((alpha * c) / current_embed_size) * input_gradient_accumulator[c];
       }
-    }
     sentence_position++;
     if (sentence_position >= sentence_length) {
       sentence_length = 0;
