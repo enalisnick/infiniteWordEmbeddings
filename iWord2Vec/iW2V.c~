@@ -6,17 +6,13 @@
 
 // Global Variables
 #define MAX_STRING 100
-#define EXP_TABLE_SIZE 1000
-#define MAX_EXP 6
 #define MAX_SENTENCE_LENGTH 1000
-#define MAX_CODE_LENGTH 40
 
 const int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 typedef float real;                    // Precision of float numbers
 
 struct vocab_word {
   long long cn;
-  int *point;
   char *word, *code, codelen;
 };
 
@@ -129,11 +125,6 @@ void SortVocab() {
     }
   }
   vocab = (struct vocab_word *)realloc(vocab, (vocab_size + 1) * sizeof(struct vocab_word));
-  // Allocate memory for the binary tree construction
-  for (a = 0; a < vocab_size; a++) {
-    vocab[a].code = (char *)calloc(MAX_CODE_LENGTH, sizeof(char));
-    vocab[a].point = (int *)calloc(MAX_CODE_LENGTH, sizeof(int));
-  }
 }
 
 // Reduces the vocabulary by removing infrequent tokens
@@ -267,11 +258,12 @@ void *TrainModelThread(void *id) {
   unsigned long long next_random = (long long)id;
   real f, g;
   clock_t now;
-  real *neu1 = (real *)calloc(layer1_size, sizeof(real));
-  real *neu1e = (real *)calloc(layer1_size, sizeof(real));
+  real *input_gradient = (real *)calloc(embed_max_size, sizeof(real));
+  real *context_gradient = (real *)calloc(embed_max_size, sizeof(real));
   FILE *fi = fopen(train_file, "rb");
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
+    // track training progress
     if (word_count - last_word_count > 10000) {
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -285,6 +277,7 @@ void *TrainModelThread(void *id) {
       alpha = starting_alpha * (1 - word_count_actual / (real)(iter * train_words + 1));
       if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
     }
+    // read a new sentence / line
     if (sentence_length == 0) {
       while (1) {
         word = ReadWordIndex(fi);
@@ -304,6 +297,7 @@ void *TrainModelThread(void *id) {
       }
       sentence_position = 0;
     }
+    // if EOF, reset to beginning
     if (feof(fi) || (word_count > train_words / num_threads)) {
       word_count_actual += word_count - last_word_count;
       local_iter--;
@@ -314,20 +308,22 @@ void *TrainModelThread(void *id) {
       fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
       continue;
     }
+    // start of training, get current word (w)
     word = sen[sentence_position];
     if (word == -1) continue;
-    for (c = 0; c < layer1_size; c++) neu1[c] = 0;
-    for (c = 0; c < layer1_size; c++) neu1e[c] = 0;
+    for (c = 0; c < embed_current_size + 1; c++) input_gradient[c] = 0; 
+    // only iterates to embed_current_size+1 since the gradient can be of larger dimensionality than that
+    for (c = 0; c < embed_current_size + 1; c++) context_gradient[c] = 0;
     next_random = next_random * (unsigned long long)25214903917 + 11;
-    b = next_random % window;
-    // TRAIN
+    b = next_random % window; // Samples(!) window size
+    // iterate through the context words
     for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
 	c = sentence_position - window + a;
 	if (c < 0) continue;
 	if (c >= sentence_length) continue;
 	last_word = sen[c];
 	if (last_word == -1) continue;
-	l1 = last_word * layer1_size;
+	context_word_position = last_word * embed_max_size;
 	for (c = 0; c < layer1_size; c++) neu1e[c] = 0;
 	// NEGATIVE SAMPLING
 	if (negative > 0) for (d = 0; d < negative + 1; d++) {
@@ -425,18 +421,30 @@ int main(int argc, char **argv) {
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
     printf("\nExamples:\n");
-    printf("./word2vec -train data.txt -output vec.txt -siz[i + 1]);
-      if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
-      if ((i = ArgPos((char *)"-binary", argc, argv)) > 0) binary = atoi(argv[i + 1]);
-      if ((i = ArgPos((char *)"-cbow", argc, argv)) > 0) cbow = atoi(argv[i + 1]);
-      if (cbow) alpha = 0.05;
-      if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
-      if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
-      if ((i = ArgPos((char *)(argv[i + 1]);
-		      if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
-		      vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
-		      vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
-		      expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));
-		      for (i = 0; i < EXP_TABLE_SIZE; i++) {
-			expTable[i] = exp((i / (real)EXP_TABLE_SIZE * 2 - 1) * MAX_EXP); // Precompute the exp() table
-			expTable[i] = expTable[i] / (expTable[i] + 1);                   // Precomp
+    printf("./iW2V -train data.txt -output vec.txt -initSize 5 -maxSize 2000 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
+    return 0;
+  }
+  output_file[0] = 0;
+  save_vocab_file[0] = 0;
+  read_vocab_file[0] = 0;
+  if ((i = ArgPos((char *)"-initSize", argc, argv)) > 0) embed_current_size = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-maxSize", argc, argv)) > 0) embed_max_size = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-train", argc, argv)) > 0) strcpy(train_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-save-vocab", argc, argv)) > 0) strcpy(save_vocab_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-read-vocab", argc, argv)) > 0) strcpy(read_vocab_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
+  if (cbow) alpha = 0.05;
+  if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
+  vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
+  vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
+  TrainModel();
+  return 0;
+}
+      
