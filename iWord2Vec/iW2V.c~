@@ -382,7 +382,7 @@ void *TrainModelThread(void *id) {
 	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size-1));
 	// no need to normalize, function does it for us
 	z_hat = sample_from_mult(z_probs);  //still need to add one? 
-	printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
+	printf("DEBUG: The value of z_hat is: %i \n", z_hat);
 	// if we sampled z = l+1, increase the number of dimensions
 	if (z_hat == embed_current_size + 1) embed_current_size++;
 	free(z_probs);
