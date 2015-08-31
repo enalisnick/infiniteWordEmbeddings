@@ -408,8 +408,7 @@ void *TrainModelThread(void *id) {
     }
   }
   fclose(fi);
-  free(neu1);
-  free(neu1e);
+  free(input_gradient_accumulator);
   pthread_exit(NULL);
 }
 
@@ -429,7 +428,7 @@ void TrainModel() {
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   fo = fopen(output_file, "wb");
    // Save the word vectors
-  fprintf(fo, "%lld %lld\n", vocab_size, layer1_size);
+  fprintf(fo, "%lld %lld\n", vocab_size, embed_current_size);
   for (a = 0; a < vocab_size; a++) {
     fprintf(fo, "%s ", vocab[a].word);
     // only print the non-zero dimensions
