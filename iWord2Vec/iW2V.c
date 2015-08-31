@@ -14,7 +14,7 @@ typedef float real;                    // Precision of float numbers
 
 struct vocab_word {
   long long cn;
-  char *word, *code, codelen;
+  char *word;
 };
 
 char train_file[MAX_STRING], output_file[MAX_STRING];
@@ -32,6 +32,7 @@ int negative = 5;
 const int table_size = 1e8;
 int *table;
 
+// Build table from which to rand. sample words
 void InitUnigramTable() {
   int a, i;
   double train_words_pow = 0;
@@ -249,46 +250,46 @@ void ReadVocab() {
 void InitNet() {
   long long a, b;
   unsigned long long next_random = 1;
-  if (negative>0) {
-    a = posix_memalign((void **)&context_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
-    if (context_embed == NULL) {printf("Memory allocation failed\n"); exit(1);}
-    for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
-	if (b < embed_current_size){
-	  next_random = next_random * (unsigned long long)25214903917 + 11;
-	  context_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
-	}
-	else{
-	  context_embed[a * embed_max_size + b] = 0;
-	}
+  // initialize context embeddings
+  a = posix_memalign((void **)&context_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
+  if (context_embed == NULL) {printf("Memory allocation failed\n"); exit(1);}
+  for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
+      if (b < embed_current_size){
+	next_random = next_random * (unsigned long long)25214903917 + 11;
+	context_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
       }
-  }
+      else{
+	context_embed[a * embed_max_size + b] = 0.0;
+      }
+    }
+  // initialize input embeddings
   for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
       if (b < embed_current_size){
 	next_random = next_random * (unsigned long long)25214903917 + 11;
 	input_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
       }
       else{
-	input_embed[a * embed_max_size + b] = 0;
+	input_embed[a * embed_max_size + b] = 0.0;
       }
     }
 }
 
+// function to compute E(w, c, z)
 float compute_energy(long long w_idx, long long c_idx, int z){
   long long a;
-  real energy = 0.0;
-  for (a = 0; a<z; a++) energy += input_embed[w_idx + a]*context_embed[c_idx + a] - log(dim_penalty) - pow(input_embed[w_idx + a],2) - pow(context_embed[c_idx + a],2);
+  float energy = 0.0;
+  for (a = 0; a<z; a++) energy += -input_embed[w_idx + a]*context_embed[c_idx + a] + log(dim_penalty) + sparsity_weight*pow(input_embed[w_idx + a],2) + sparsity_weight*pow(context_embed[c_idx + a],2);
   return energy;
 }
 
 void *TrainModelThread(void *id) {
   long long a, b, d, cw, word, last_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
-  long long l1, l2, c, target, label, local_iter = iter;
+  long long input_word_position, context_word_position, negative_word_position, c, local_iter = iter;
   unsigned long long next_random = (long long)id;
-  real f, g, Z_z;
+  real prob_c, Z_c;
   clock_t now;
-  real *input_gradient = (real *)calloc(embed_max_size, sizeof(real));
-  real *context_gradient = (real *)calloc(embed_max_size, sizeof(real));
+  real *input_gradient_accumulator = (real *)calloc(embed_max_size, sizeof(real));
   FILE *fi = fopen(train_file, "rb");
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
@@ -341,9 +342,6 @@ void *TrainModelThread(void *id) {
     word = sen[sentence_position];
     input_word_position = word * embed_max_size;
     if (word == -1) continue;
-    for (c = 0; c < embed_current_size + 1; c++) input_gradient[c] = 0; 
-    // only iterates to embed_current_size+1 since the gradient can be of larger dimensionality than that
-    for (c = 0; c < embed_current_size + 1; c++) context_gradient[c] = 0;
     next_random = next_random * (unsigned long long)25214903917 + 11;
     b = next_random % window; // Samples(!) window size
     // iterate through the context words
@@ -353,19 +351,20 @@ void *TrainModelThread(void *id) {
 	if (c >= sentence_length) continue;
 	last_word = sen[c];
 	if (last_word == -1) continue;
+	// only need to initialize dimensions less than current_size + 1 since that's all it can grow                                                                                                 
+	for (c = 0; c < embed_current_size + 1; c++) input_gradient_accumulator[c] = 0.0;
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
-	real z_probs[embed_current_size+1];
-	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c));
+	real z_probs[embed_current_size+1]; // WILL THIS WORK?
+	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c ));
 	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size-1));
 	// no need to normalize, function does it for us
 	default_random_engine generator;
 	discrete_distribution<int> multi_dist(z_probs);
-	z_hat = multi_dist(generator);
+	z_hat = multi_dist(generator) + 1; // can return a zero index, so remember to add one!
 	// if we sampled z = l+1, increase the number of dimensions
-	if (z_hat == embed_current_size) embed_current_size++;
-	for (c = 0; c < layer1_size; c++) neu1e[c] = 0;
-	// NEGATIVE SAMPLING
+	if (z_hat == embed_current_size + 1) embed_current_size++;
+	// NEGATIVE SAMPLING CONTEXT WORDS
 	Z_c = 0.0;
 	// need to iterate through the negatives once to compute partition function
 	for (d = 0; d < negative; d++) {
@@ -385,20 +384,22 @@ void *TrainModelThread(void *id) {
 	    negative_word_position = neg_samples[d] * embed_max_size;
 	    prob_c = exp(-compute_energy(input_word_position, negative_word_position, z_hat)) / Z_c;
 	    for (c = 0; c < z_hat; c++){
-	      // Note: need per-dimension learning rates
-	      context_embed[negative_word_position + c] -= ((alpha * c) / current_embed_size) * prob_c * (input_embed[input_word_position + c] - 2*context_embed[negative_word_position + c]);
-	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - 2*input_embed[input_word_position + c]);
+	      // Note: need per-dimension learning rates.  Hack it now with (idx / current_embed_size) factor
+	      // Important!: add to accumulator before updating
+	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
+	      context_embed[negative_word_position + c] -= ((alpha * c) / current_embed_size) * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
 	    }
-	  } 
+	  }
 	}
 	// update positive context and add to accumulator
 	prob_c = exp(-compute_energy(input_word_position, context_word_position, z_hat)) / Z_c;
 	for (c = 0; c < z_hat; c++){
-	  context_embed[context_word_position + c] -= ((alpha * c) / current_embed_size) * (prob_c - 1.0) * (input_embed[input_word_podition + c] - 2*context_embed[context_word_position + c]);
-	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - 2*input_embed[input_word_position + c]);
+	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
+	  context_embed[context_word_position + c] -= ((alpha * c) / current_embed_size) * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
 	}
 	// update input word
-	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= ((alpha * c) / current_embed_size) * input_gradient_accumulator[c];
+	// add a factor of 1/(num_of_negatives+1) since we have num_of_negatives+1 words contributing to the gradient instead of just one
+	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * c) / current_embed_size) * input_gradient_accumulator[c];
       }
     sentence_position++;
     if (sentence_position >= sentence_length) {

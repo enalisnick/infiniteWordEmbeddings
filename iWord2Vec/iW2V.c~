@@ -14,7 +14,7 @@ typedef float real;                    // Precision of float numbers
 
 struct vocab_word {
   long long cn;
-  char *word, *code, codelen;
+  char *word;
 };
 
 char train_file[MAX_STRING], output_file[MAX_STRING];
@@ -275,20 +275,19 @@ void InitNet() {
 
 float compute_energy(long long w_idx, long long c_idx, int z){
   long long a;
-  real energy = 0.0;
-  for (a = 0; a<z; a++) energy += input_embed[w_idx + a]*context_embed[c_idx + a] - log(dim_penalty) - pow(input_embed[w_idx + a],2) - pow(context_embed[c_idx + a],2);
+  float energy = 0.0;
+  for (a = 0; a<z; a++) energy += -input_embed[w_idx + a]*context_embed[c_idx + a] + log(dim_penalty) + sparsity_weight*pow(input_embed[w_idx + a],2) + sparsity_weight*pow(context_embed[c_idx + a],2);
   return energy;
 }
 
 void *TrainModelThread(void *id) {
   long long a, b, d, cw, word, last_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
-  long long l1, l2, c, target, label, local_iter = iter;
+  long long input_word_position, context_word_position, negative_word_position, c, local_iter = iter;
   unsigned long long next_random = (long long)id;
-  real f, g, Z_z;
+  real prob_c, Z_z, Z_c;
   clock_t now;
-  real *input_gradient = (real *)calloc(embed_max_size, sizeof(real));
-  real *context_gradient = (real *)calloc(embed_max_size, sizeof(real));
+  real *input_gradient_accumulator = (real *)calloc(embed_max_size, sizeof(real));
   FILE *fi = fopen(train_file, "rb");
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
@@ -387,7 +386,7 @@ void *TrainModelThread(void *id) {
 	    for (c = 0; c < z_hat; c++){
 	      // Note: need per-dimension learning rates
 	      context_embed[negative_word_position + c] -= ((alpha * c) / current_embed_size) * prob_c * (input_embed[input_word_position + c] - 2*context_embed[negative_word_position + c]);
-	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - 2*input_embed[input_word_position + c])
+	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - 2*input_embed[input_word_position + c]);
 	    }
 	  } 
 	}
@@ -431,8 +430,8 @@ void TrainModel() {
   fprintf(fo, "%lld %lld\n", vocab_size, layer1_size);
   for (a = 0; a < vocab_size; a++) {
     fprintf(fo, "%s ", vocab[a].word);
-    if (binary) for (b = 0; b < layer1_size; b++) fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fo);
-    else for (b = 0; b < layer1_size; b++) fprintf(fo, "%lf ", syn0[a * layer1_size + b]);
+    // only print the non-zero dimensions
+    (b = 0; b < embed_current_size; b++) fprintf(fo, "%lf ", input_embed[a * embed_max_size + b]);
     fprintf(fo, "\n");
   }
   return -1;
