@@ -408,8 +408,7 @@ void *TrainModelThread(void *id) {
     }
   }
   fclose(fi);
-  free(neu1);
-  free(neu1e);
+  free(input_gradient_accumulator);
   pthread_exit(NULL);
 }
 

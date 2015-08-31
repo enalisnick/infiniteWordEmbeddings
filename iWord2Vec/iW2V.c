@@ -284,12 +284,13 @@ float compute_energy(long long w_idx, long long c_idx, int z){
 
 void *TrainModelThread(void *id) {
   long long a, b, d, cw, word, last_word, sentence_length = 0, sentence_position = 0;
-  long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
+  long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], neg_samples[negative];
   long long input_word_position, context_word_position, negative_word_position, c, local_iter = iter;
   unsigned long long next_random = (long long)id;
   real prob_c, Z_c;
   clock_t now;
   real *input_gradient_accumulator = (real *)calloc(embed_max_size, sizeof(real));
+  real *z_probs;
   FILE *fi = fopen(train_file, "rb");
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
@@ -355,7 +356,7 @@ void *TrainModelThread(void *id) {
 	for (c = 0; c < embed_current_size + 1; c++) input_gradient_accumulator[c] = 0.0;
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
-	real z_probs[embed_current_size+1]; // WILL THIS WORK?
+	z_probs = (real *)calloc(embed_current_size+1, sizeof(real));
 	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c ));
 	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size-1));
 	// no need to normalize, function does it for us
@@ -364,6 +365,7 @@ void *TrainModelThread(void *id) {
 	z_hat = multi_dist(generator) + 1; // can return a zero index, so remember to add one!
 	// if we sampled z = l+1, increase the number of dimensions
 	if (z_hat == embed_current_size + 1) embed_current_size++;
+	free(z_probs);
 	// NEGATIVE SAMPLING CONTEXT WORDS
 	Z_c = 0.0;
 	// need to iterate through the negatives once to compute partition function
