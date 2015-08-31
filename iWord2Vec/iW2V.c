@@ -3,7 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
-#include <random.h>
+#include <gsl/gsl_randist.h>
 
 // Global Variables
 #define MAX_STRING 100
@@ -24,7 +24,7 @@ int debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1,
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
 long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0;
-real alpha = 0.025, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
+real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
 clock_t start;
 int negative = 5;
@@ -282,15 +282,36 @@ float compute_energy(long long w_idx, long long c_idx, int z){
   return energy;
 }
 
+// function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
+// http://stackoverflow.com/questions/25363450/generating-a-multinomial-distribution
+int sample_from_mult(double probs[]){ // always sample 1 value
+  const gsl_rng_type * T2;
+  gsl_rng * r2;
+  srand(time(NULL));
+
+  unsigned int Seed2 = 1234567; // rand();
+  gsl_rng_env_setup();
+
+  T2 = gsl_rng_default;
+  r2 = gsl_rng_alloc (T2);
+  gsl_rng_set (r2, Seed2);
+
+  size_t k = embed_current_size + 1;
+
+  unsigned int mult_op[k];
+  gsl_ran_multinomial(r2, k, 1, probs, mult_op);
+  return mult_op[0];
+}
+
 void *TrainModelThread(void *id) {
-  long long a, b, d, cw, word, last_word, sentence_length = 0, sentence_position = 0;
+  long long a, b, d, word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], neg_samples[negative];
-  long long input_word_position, context_word_position, negative_word_position, c, local_iter = iter;
+  long long input_word_position, context_word_position, negative_word_position, z_hat, c, local_iter = iter;
   unsigned long long next_random = (long long)id;
   real prob_c, Z_c;
   clock_t now;
   real *input_gradient_accumulator = (real *)calloc(embed_max_size, sizeof(real));
-  real *z_probs;
+  double *z_probs;
   FILE *fi = fopen(train_file, "rb");
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
@@ -356,13 +377,11 @@ void *TrainModelThread(void *id) {
 	for (c = 0; c < embed_current_size + 1; c++) input_gradient_accumulator[c] = 0.0;
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
-	z_probs = (real *)calloc(embed_current_size+1, sizeof(real));
+	z_probs = (double *)calloc(embed_current_size+1, sizeof(double));
 	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c ));
 	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size-1));
 	// no need to normalize, function does it for us
-	default_random_engine generator;
-	discrete_distribution<int> multi_dist(z_probs);
-	z_hat = multi_dist(generator) + 1; // can return a zero index, so remember to add one!
+	z_hat = sample_from_mult(z_probs);  //still need to add one? 
 	// if we sampled z = l+1, increase the number of dimensions
 	if (z_hat == embed_current_size + 1) embed_current_size++;
 	free(z_probs);
@@ -389,7 +408,7 @@ void *TrainModelThread(void *id) {
 	      // Note: need per-dimension learning rates.  Hack it now with (idx / current_embed_size) factor
 	      // Important!: add to accumulator before updating
 	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	      context_embed[negative_word_position + c] -= ((alpha * c) / current_embed_size) * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
+	      context_embed[negative_word_position + c] -= ((alpha * c) / embed_current_size) * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
 	    }
 	  }
 	}
@@ -397,11 +416,11 @@ void *TrainModelThread(void *id) {
 	prob_c = exp(-compute_energy(input_word_position, context_word_position, z_hat)) / Z_c;
 	for (c = 0; c < z_hat; c++){
 	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	  context_embed[context_word_position + c] -= ((alpha * c) / current_embed_size) * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
+	  context_embed[context_word_position + c] -= ((alpha * c) / embed_current_size) * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
 	}
 	// update input word
 	// add a factor of 1/(num_of_negatives+1) since we have num_of_negatives+1 words contributing to the gradient instead of just one
-	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * c) / current_embed_size) * input_gradient_accumulator[c];
+	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * c) / embed_current_size) * input_gradient_accumulator[c];
       }
     sentence_position++;
     if (sentence_position >= sentence_length) {
@@ -415,7 +434,7 @@ void *TrainModelThread(void *id) {
 }
 
 void TrainModel() {
-  long a, b, c, d;
+  long a, b;
   FILE *fo;
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
@@ -434,11 +453,24 @@ void TrainModel() {
   for (a = 0; a < vocab_size; a++) {
     fprintf(fo, "%s ", vocab[a].word);
     // only print the non-zero dimensions
-    (b = 0; b < embed_current_size; b++) fprintf(fo, "%lf ", input_embed[a * embed_max_size + b]);
+    for (b = 0; b < embed_current_size; b++) fprintf(fo, "%lf ", input_embed[a * embed_max_size + b]);
     fprintf(fo, "\n");
   }
+  fclose(fo);
+}
+
+int ArgPos(char *str, int argc, char **argv) {
+  int a;
+  for (a = 1; a < argc; a++) if (!strcmp(str, argv[a])) {
+      if (a == argc - 1) {
+	printf("Argument missing for %s\n", str);
+	exit(1);
+      }
+      return a;
+    }
   return -1;
 }
+
 
 int main(int argc, char **argv) {
   int i;
@@ -489,7 +521,6 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-save-vocab", argc, argv)) > 0) strcpy(save_vocab_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-read-vocab", argc, argv)) > 0) strcpy(read_vocab_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
-  if (cbow) alpha = 0.05;
   if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
   if ((i = ArgPos((char *)"-dimPenalty", argc, argv)) > 0) dim_penalty = atoi(argv[i+1]);
   if ((i = ArgPos((char *)"-sparsityWeight", argc, argv)) > 0) sparsity_weight = atof(argv[i+1]);
