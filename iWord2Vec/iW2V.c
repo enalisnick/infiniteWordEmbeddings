@@ -392,18 +392,26 @@ void *TrainModelThread(void *id) {
 	for (c = 1; c <= embed_current_size; c++) {
             float val = compute_energy(input_word_position, context_word_position, c );
             z_probs[c-1] = exp(-val);
-            printf("c: %lli, E: %f , p: %f \n", c, val, exp(-val)); 
+            //printf("c: %lli, E: %f , p: %f \n", c, val, exp(-val)); 
 	}
         z_probs[embed_current_size] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
-	printf("p(last): %f \n", z_probs[embed_current_size]);
+	//printf("p(last): %f \n", z_probs[embed_current_size]);
 	// no need to normalize, function does it for us
 	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
-        debug_prob(z_probs, embed_current_size + 1);
+        //debug_prob(z_probs, embed_current_size + 1);
         
-	printf("embed current size: %lld \n", embed_current_size);
-        printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
+	//printf("embed current size: %lld \n", embed_current_size);
+        //printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
 	// if we sampled z = l+1, increase the number of dimensions
-	if (z_hat == embed_current_size + 1) embed_current_size++;
+	if (z_hat == embed_current_size + 1 && z_hat < embed_max_size) {
+            embed_current_size++;
+            // initialize newly added dimension to be random (not zero)
+            for (d = 0; d < vocab_size; d++) {
+      	        // embed_current_size-1 because 0-indexed
+	        context_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
+		input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
+            }
+        }
 	free(z_probs);
 	// NEGATIVE SAMPLING CONTEXT WORDS
 	Z_c = 0.0;
@@ -437,10 +445,17 @@ void *TrainModelThread(void *id) {
 	for (c = 0; c < z_hat; c++){
 	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
 	  context_embed[context_word_position + c] -= ((alpha * (c+1)) / embed_current_size) * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
+	  //printf("c: %lld, alpha term: %f \n", c, ((alpha * (c+1)) / embed_current_size));
+	  //printf("c: %lld, context dim: %f \n", c, (input_embed[input_word_position + c]));
+          //printf("c: %lld, sparsity: %f \n", c, sparsity_weight*2*context_embed[context_word_position + c]);
+          //printf("c: %lld, context_gradient: %f \n", c, context_embed[context_word_position + c]);
 	}
 	// update input word
 	// add a factor of 1/(num_of_negatives+1) since we have num_of_negatives+1 words contributing to the gradient instead of just one
-	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size) * input_gradient_accumulator[c];
+	for (c = 0; c < z_hat; c++) {
+	  input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size) * input_gradient_accumulator[c];
+          //printf("c: %lld, word_gradient: %f \n", c, input_embed[input_word_position + c]);
+        }
       }
     sentence_position++;
     if (sentence_position >= sentence_length) {
