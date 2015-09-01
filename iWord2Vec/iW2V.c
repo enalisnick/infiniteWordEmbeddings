@@ -20,7 +20,7 @@ struct vocab_word {
 char train_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
-int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1, dim_penalty = 10;
+int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1, dim_penalty = 1.1;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
 long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0;
@@ -304,6 +304,15 @@ int sample_from_mult(double probs[]){ // always sample 1 value
   return mult_op[0];
 }
 
+void debug_prob(double probs[], int len) {
+  int i;
+  printf("*****************\n");
+  for (i = 0; i < len; ++i) {
+    printf("z = %i prob: %f\n", i, probs[i]); 
+  }
+  printf("*****************\n");	
+}
+
 void *TrainModelThread(void *id) {
   long long a, b, d, word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], neg_samples[negative];
@@ -379,11 +388,23 @@ void *TrainModelThread(void *id) {
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
 	z_probs = (double *)calloc(embed_current_size+1, sizeof(double));
-	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c ));
-	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size-1));
-	// no need to normalize, function does it for us
-	z_hat = sample_from_mult(z_probs);  //still need to add one? 
-	printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
+	for (c = 1; c <= embed_current_size; c++) {
+            float val = compute_energy(input_word_position, context_word_position, c );
+            z_probs[c-1] = exp(-val);
+            printf("c: %lli, E: %f , p: %f \n", c, val, exp(-val)); 
+	}
+        z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
+	printf("p(last): %f \n", z_probs[embed_current_size]);
+        if (z_probs[embed_current_size] == INFINITY) {
+           z_hat = embed_current_size + 1;
+	}
+	else {
+	   // no need to normalize, function does it for us
+	   z_hat = sample_from_mult(z_probs);  //still need to add one? 
+	}
+        debug_prob(z_probs, embed_current_size + 1);
+        printf("embed current size: %lld \n", embed_current_size);
+        printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
 	// if we sampled z = l+1, increase the number of dimensions
 	if (z_hat == embed_current_size + 1) embed_current_size++;
 	free(z_probs);
