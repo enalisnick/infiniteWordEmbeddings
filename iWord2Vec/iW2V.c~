@@ -20,7 +20,8 @@ struct vocab_word {
 char train_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
-int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1, dim_penalty = 10;
+int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
+real dim_penalty = 1.1;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
 long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0;
@@ -263,6 +264,7 @@ void InitNet() {
       }
     }
   // initialize input embeddings
+  a = posix_memalign((void **)&input_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
   for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
       if (b < embed_current_size){
 	next_random = next_random * (unsigned long long)25214903917 + 11;
@@ -284,23 +286,23 @@ float compute_energy(long long w_idx, long long c_idx, int z){
 
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
 // http://stackoverflow.com/questions/25363450/generating-a-multinomial-distribution
-int sample_from_mult(double probs[]){ // always sample 1 value
-  const gsl_rng_type * T2;
-  gsl_rng * r2;
-  srand(time(NULL));
-
-  unsigned int Seed2 = 1234567; // rand();
-  gsl_rng_env_setup();
-
-  T2 = gsl_rng_default;
-  r2 = gsl_rng_alloc (T2);
-  gsl_rng_set (r2, Seed2);
-
+int sample_from_mult(double probs[], const gsl_rng* r){ // always sample 1 value
   size_t k = embed_current_size + 1;
-
   unsigned int mult_op[k];
-  gsl_ran_multinomial(r2, k, 1, probs, mult_op);
-  return mult_op[0];
+  gsl_ran_multinomial(r, k, 1, probs, mult_op);
+  for (int idx=1; idx<=k; idx++){
+    if (mult_op[idx-1]==1) return idx;
+  }
+  return 0;
+}
+
+void debug_prob(double probs[], int len) {
+  int i;
+  printf("*****************\n");
+  for (i = 0; i < len; ++i) {
+    printf("z = %i prob: %f\n", i, probs[i]); 
+  }
+  printf("*****************\n");	
 }
 
 void *TrainModelThread(void *id) {
@@ -314,6 +316,15 @@ void *TrainModelThread(void *id) {
   double *z_probs;
   FILE *fi = fopen(train_file, "rb");
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
+  // set up random number generator
+  const gsl_rng_type * T2;
+  gsl_rng * r2;
+  srand(time(NULL));
+  unsigned int Seed2 = rand();
+  gsl_rng_env_setup();
+  T2 = gsl_rng_default;
+  r2 = gsl_rng_alloc (T2);
+  gsl_rng_set (r2, Seed2);
   while (1) {
     // track training progress
     if (word_count - last_word_count > 10000) {
@@ -378,11 +389,19 @@ void *TrainModelThread(void *id) {
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
 	z_probs = (double *)calloc(embed_current_size+1, sizeof(double));
-	for (c = 0; c < embed_current_size; c++) z_probs[c] = exp(-compute_energy(input_word_position, context_word_position, c ));
-	z_probs[embed_current_size] = dim_penalty / (dim_penalty - 1.0) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size-1));
+	for (c = 1; c <= embed_current_size; c++) {
+            float val = compute_energy(input_word_position, context_word_position, c );
+            z_probs[c-1] = exp(-val);
+            printf("c: %lli, E: %f , p: %f \n", c, val, exp(-val)); 
+	}
+        z_probs[embed_current_size] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
+	printf("p(last): %f \n", z_probs[embed_current_size]);
 	// no need to normalize, function does it for us
-	z_hat = sample_from_mult(z_probs);  //still need to add one? 
-	printf("DEBUG: The value of z_hat is: %i \n", z_hat);
+	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
+        debug_prob(z_probs, embed_current_size + 1);
+        
+	printf("embed current size: %lld \n", embed_current_size);
+        printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
 	// if we sampled z = l+1, increase the number of dimensions
 	if (z_hat == embed_current_size + 1) embed_current_size++;
 	free(z_probs);
@@ -409,7 +428,7 @@ void *TrainModelThread(void *id) {
 	      // Note: need per-dimension learning rates.  Hack it now with (idx / current_embed_size) factor
 	      // Important!: add to accumulator before updating
 	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	      context_embed[negative_word_position + c] -= ((alpha * c) / embed_current_size) * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
+	      context_embed[negative_word_position + c] -= ((alpha * (c+1)) / embed_current_size) * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
 	    }
 	  }
 	}
@@ -417,11 +436,11 @@ void *TrainModelThread(void *id) {
 	prob_c = exp(-compute_energy(input_word_position, context_word_position, z_hat)) / Z_c;
 	for (c = 0; c < z_hat; c++){
 	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	  context_embed[context_word_position + c] -= ((alpha * c) / embed_current_size) * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
+	  context_embed[context_word_position + c] -= ((alpha * (c+1)) / embed_current_size) * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
 	}
 	// update input word
 	// add a factor of 1/(num_of_negatives+1) since we have num_of_negatives+1 words contributing to the gradient instead of just one
-	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * c) / embed_current_size) * input_gradient_accumulator[c];
+	for (c = 0; c < z_hat; c++) input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size) * input_gradient_accumulator[c];
       }
     sentence_position++;
     if (sentence_position >= sentence_length) {
@@ -472,6 +491,24 @@ int ArgPos(char *str, int argc, char **argv) {
   return -1;
 }
 
+// testing function for sampling from multinomial
+void multinom_unit_test(){
+  // set up random number generator                                                                                                                                                                    
+  const gsl_rng_type * T2;
+  gsl_rng * r2;
+  srand(time(NULL));
+  unsigned int Seed2 = rand();
+  gsl_rng_env_setup();
+  T2 = gsl_rng_default;
+  r2 = gsl_rng_alloc (T2);
+  gsl_rng_set (r2, Seed2);
+  
+  double x[] = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
+  for (int w=0; w<10; w++){
+    int y = sample_from_mult(x, r2);
+    printf("Sampled idx: %i \n", y);
+  }
+}
 
 int main(int argc, char **argv) {
   int i;
@@ -535,6 +572,7 @@ int main(int argc, char **argv) {
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
   TrainModel();
+  //multinom_unit_test();
   return 0;
 }
       

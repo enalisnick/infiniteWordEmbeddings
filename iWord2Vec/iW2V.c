@@ -286,23 +286,14 @@ float compute_energy(long long w_idx, long long c_idx, int z){
 
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
 // http://stackoverflow.com/questions/25363450/generating-a-multinomial-distribution
-int sample_from_mult(double probs[]){ // always sample 1 value
-  const gsl_rng_type * T2;
-  gsl_rng * r2;
-  srand(time(NULL));
-
-  unsigned int Seed2 = 7654321; // rand();
-  gsl_rng_env_setup();
-
-  T2 = gsl_rng_default;
-  r2 = gsl_rng_alloc (T2);
-  gsl_rng_set (r2, Seed2);
-
+int sample_from_mult(double probs[], const gsl_rng* r){ // always sample 1 value
   size_t k = embed_current_size + 1;
-
   unsigned int mult_op[k];
-  gsl_ran_multinomial(r2, k, 1, probs, mult_op);
-  return mult_op[0];
+  gsl_ran_multinomial(r, k, 1, probs, mult_op);
+  for (int idx=1; idx<=k; idx++){
+    if (mult_op[idx-1]==1) return idx;
+  }
+  return 0;
 }
 
 void debug_prob(double probs[], int len) {
@@ -325,6 +316,15 @@ void *TrainModelThread(void *id) {
   double *z_probs;
   FILE *fi = fopen(train_file, "rb");
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
+  // set up random number generator
+  const gsl_rng_type * T2;
+  gsl_rng * r2;
+  srand(time(NULL));
+  unsigned int Seed2 = rand();
+  gsl_rng_env_setup();
+  T2 = gsl_rng_default;
+  r2 = gsl_rng_alloc (T2);
+  gsl_rng_set (r2, Seed2);
   while (1) {
     // track training progress
     if (word_count - last_word_count > 10000) {
@@ -397,7 +397,7 @@ void *TrainModelThread(void *id) {
         z_probs[embed_current_size] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
 	printf("p(last): %f \n", z_probs[embed_current_size]);
 	// no need to normalize, function does it for us
-	z_hat = sample_from_mult(z_probs);  //still need to add one? 
+	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
         debug_prob(z_probs, embed_current_size + 1);
         
 	printf("embed current size: %lld \n", embed_current_size);
@@ -491,6 +491,24 @@ int ArgPos(char *str, int argc, char **argv) {
   return -1;
 }
 
+// testing function for sampling from multinomial
+void multinom_unit_test(){
+  // set up random number generator                                                                                                                                                                    
+  const gsl_rng_type * T2;
+  gsl_rng * r2;
+  srand(time(NULL));
+  unsigned int Seed2 = rand();
+  gsl_rng_env_setup();
+  T2 = gsl_rng_default;
+  r2 = gsl_rng_alloc (T2);
+  gsl_rng_set (r2, Seed2);
+  
+  double x[] = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
+  for (int w=0; w<10; w++){
+    int y = sample_from_mult(x, r2);
+    printf("Sampled idx: %i \n", y);
+  }
+}
 
 int main(int argc, char **argv) {
   int i;
