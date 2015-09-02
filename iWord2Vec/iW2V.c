@@ -325,6 +325,7 @@ void *TrainModelThread(void *id) {
   T2 = gsl_rng_default;
   r2 = gsl_rng_alloc (T2);
   gsl_rng_set (r2, Seed2);
+  float loss = 0.0; 
   while (1) {
     // track training progress
     if (word_count - last_word_count > 10000) {
@@ -335,7 +336,10 @@ void *TrainModelThread(void *id) {
         printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha,
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
+        printf("avg loss: %f  ", loss/10000.0);
+	printf("curr dim: %lld\n", embed_current_size);	
         fflush(stdout);
+        loss = 0.0;
       }
       alpha = starting_alpha * (1 - word_count_actual / (real)(iter * train_words + 1));
       if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
@@ -415,6 +419,7 @@ void *TrainModelThread(void *id) {
 	free(z_probs);
 	// NEGATIVE SAMPLING CONTEXT WORDS
 	Z_c = 0.0;
+	//printf("alpha: %f\n", alpha);
 	// need to iterate through the negatives once to compute partition function
 	for (d = 0; d < negative; d++) {
 	    next_random = next_random * (unsigned long long)25214903917 + 11;
@@ -436,15 +441,20 @@ void *TrainModelThread(void *id) {
 	      // Note: need per-dimension learning rates.  Hack it now with (idx / current_embed_size) factor
 	      // Important!: add to accumulator before updating
 	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	      context_embed[negative_word_position + c] -= ((alpha * (c+1)) / embed_current_size) * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
+	      float per_dim_alpha = ((alpha * (c+1)) / embed_current_size);
+              //float per_dim_alpha = alpha;
+	      context_embed[negative_word_position + c] -= per_dim_alpha * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
 	    }
 	  }
 	}
 	// update positive context and add to accumulator
 	prob_c = exp(-compute_energy(input_word_position, context_word_position, z_hat)) / Z_c;
-	for (c = 0; c < z_hat; c++){
+	loss += prob_c;
+        for (c = 0; c < z_hat; c++){
 	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	  context_embed[context_word_position + c] -= ((alpha * (c+1)) / embed_current_size) * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
+	  float per_dim_alpha = ((alpha * (c+1)) / embed_current_size);
+          //float per_dim_alpha = alpha;
+          context_embed[context_word_position + c] -= per_dim_alpha * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
 	  //printf("c: %lld, alpha term: %f \n", c, ((alpha * (c+1)) / embed_current_size));
 	  //printf("c: %lld, context dim: %f \n", c, (input_embed[input_word_position + c]));
           //printf("c: %lld, sparsity: %f \n", c, sparsity_weight*2*context_embed[context_word_position + c]);
@@ -453,7 +463,9 @@ void *TrainModelThread(void *id) {
 	// update input word
 	// add a factor of 1/(num_of_negatives+1) since we have num_of_negatives+1 words contributing to the gradient instead of just one
 	for (c = 0; c < z_hat; c++) {
-	  input_embed[input_word_position + c] -= (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size) * input_gradient_accumulator[c];
+          float per_dim_alpha = (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size);
+	  //float per_dim_alpha = alpha;
+	  input_embed[input_word_position + c] -=  per_dim_alpha * input_gradient_accumulator[c];
           //printf("c: %lld, word_gradient: %f \n", c, input_embed[input_word_position + c]);
         }
       }
