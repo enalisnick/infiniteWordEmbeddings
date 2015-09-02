@@ -12,7 +12,7 @@ with open(embedding_fileName) as f:
     embeddings.append([float(x) for x in line[1:]])
 vocab_size = len(vocab)
 
-headers = ["Word", "Cosine Similarity"]
+headers = ["Rank", "Word", "Cosine Similarity"]
 k = 50 # number of nearest neighbors
 input = "none"
 while True:
@@ -31,8 +31,8 @@ while True:
     top_k_idxs = sorted(range(vocab_size), key=sims.__getitem__, reverse=True)[:k]
     t = []
     print "%d nearest neighbors to %s:" %(k, input)
-    for idx in top_k_idxs:
-      t.append([vocab[idx], sims[idx]])
+    for i, idx in enumerate(top_k_idxs):
+      t.append([i+1, vocab[idx], sims[idx]])
     # output table
     print tabulate(t,headers=headers)
     except ValueError:
