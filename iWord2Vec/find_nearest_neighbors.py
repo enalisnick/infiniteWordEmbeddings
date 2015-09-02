@@ -35,5 +35,5 @@ while True:
       t.append([i+1, vocab[idx], sims[idx]])
     # output table
     print tabulate(t,headers=headers)
-    except ValueError:
-      print "There's no embedding for that word.  Try again."
+  except ValueError:
+    print "There's no embedding for that word.  Try again."
