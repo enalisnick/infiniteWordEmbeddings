@@ -4,14 +4,22 @@ from scipy import spatial
 from tabulate import tabulate
 
 if __name__ == '__main__':
-  ### READ EMBEDDINGS FROM TXT FILE
-  embedding_fileName = sys.argv[1] 
-  k = int(sys.argv[2]) # number of nearest neighbors
   
+  ### READ INPUT ARGS
+  num_of_args = len(sys.argv)
+  if num_of_args < 2:
+    print "Embedding file not specified...quitting."
+    exit()
+
+  k = 50
   num_dims = -1
-  if len(sys.argv) > 3:
+  embedding_fileName = sys.argv[1]
+  if num_of_args == 3:
+    k = int(sys.argv[2]) # number of nearest neighbors
+  elif num_of_args == 4:
     num_dims = int(sys.argv[3]) # number of dimensions to do similarity over
  
+  ### READ EMBEDDINGS FROM TXT FILE
   embeddings = []
   vocab = []
   with open(embedding_fileName) as f:
