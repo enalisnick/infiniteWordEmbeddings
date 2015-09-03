@@ -403,23 +403,24 @@ void *TrainModelThread(void *id) {
 	// no need to normalize, function does it for us
 	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
         //debug_prob(z_probs, embed_current_size + 1);
-        
-	//printf("embed current size: %lld \n", embed_current_size);
         //printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
+	
 	// if we sampled z = l+1, increase the number of dimensions
 	if (z_hat == embed_current_size + 1 && z_hat < embed_max_size) {
             embed_current_size++;
             // initialize newly added dimension to be random (not zero)
             for (d = 0; d < vocab_size; d++) {
       	        // embed_current_size-1 because 0-indexed
-	        context_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
-		input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
+	        next_random = next_random * (unsigned long long)25214903917 + 11;
+                context_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
+		//next_random = next_random * (unsigned long long)25214903917 + 11;
+                //input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
             }
         }
 	free(z_probs);
+	
 	// NEGATIVE SAMPLING CONTEXT WORDS
 	Z_c = 0.0;
-	//printf("alpha: %f\n", alpha);
 	// need to iterate through the negatives once to compute partition function
 	for (d = 0; d < negative; d++) {
 	    next_random = next_random * (unsigned long long)25214903917 + 11;
@@ -441,8 +442,8 @@ void *TrainModelThread(void *id) {
 	      // Note: need per-dimension learning rates.  Hack it now with (idx / current_embed_size) factor
 	      // Important!: add to accumulator before updating
 	      input_gradient_accumulator[c] += prob_c * (context_embed[negative_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	      float per_dim_alpha = ((alpha * (c+1)) / embed_current_size);
-              //float per_dim_alpha = alpha;
+	      //float per_dim_alpha = ((alpha * (c+1)) / embed_current_size);
+              float per_dim_alpha = alpha;
 	      context_embed[negative_word_position + c] -= per_dim_alpha * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
 	    }
 	  }
@@ -452,21 +453,16 @@ void *TrainModelThread(void *id) {
 	loss += prob_c;
         for (c = 0; c < z_hat; c++){
 	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-	  float per_dim_alpha = ((alpha * (c+1)) / embed_current_size);
-          //float per_dim_alpha = alpha;
+	  //float per_dim_alpha = ((alpha * (c+1)) / embed_current_size);
+          float per_dim_alpha = alpha;
           context_embed[context_word_position + c] -= per_dim_alpha * (prob_c - 1.0) * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[context_word_position + c]);
-	  //printf("c: %lld, alpha term: %f \n", c, ((alpha * (c+1)) / embed_current_size));
-	  //printf("c: %lld, context dim: %f \n", c, (input_embed[input_word_position + c]));
-          //printf("c: %lld, sparsity: %f \n", c, sparsity_weight*2*context_embed[context_word_position + c]);
-          //printf("c: %lld, context_gradient: %f \n", c, context_embed[context_word_position + c]);
 	}
 	// update input word
 	// add a factor of 1/(num_of_negatives+1) since we have num_of_negatives+1 words contributing to the gradient instead of just one
 	for (c = 0; c < z_hat; c++) {
-          float per_dim_alpha = (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size);
-	  //float per_dim_alpha = alpha;
+          //float per_dim_alpha = (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size);
+	  float per_dim_alpha = alpha;
 	  input_embed[input_word_position + c] -=  per_dim_alpha * input_gradient_accumulator[c];
-          //printf("c: %lld, word_gradient: %f \n", c, input_embed[input_word_position + c]);
         }
       }
     sentence_position++;
