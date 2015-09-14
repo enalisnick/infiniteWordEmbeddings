@@ -392,13 +392,14 @@ void *TrainModelThread(void *id) {
 	for (c = 0; c < embed_current_size + 1; c++) input_gradient_accumulator[c] = 0.0;
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
-	z_probs = (double *)calloc(embed_current_size+1, sizeof(double));
-	for (c = 1; c <= embed_current_size; c++) {
+        int z_probs_size = embed_current_size + 1;
+	z_probs = (double *)calloc(z_probs_size, sizeof(double));
+	for (c = 1; c <= z_probs_size-1; c++) {
             float val = compute_energy(input_word_position, context_word_position, c );
             z_probs[c-1] = exp(-val);
             //printf("c: %lli, E: %f , p: %f \n", c, val, exp(-val)); 
 	}
-        z_probs[embed_current_size] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
+        z_probs[z_probs_size-1] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
 	//printf("p(last): %f \n", z_probs[embed_current_size]);
 	// no need to normalize, function does it for us
 	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
