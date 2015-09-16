@@ -325,10 +325,11 @@ void *TrainModelThread(void *id) {
   T2 = gsl_rng_default;
   r2 = gsl_rng_alloc (T2);
   gsl_rng_set (r2, Seed2);
-  float loss = 0.0; 
+  float acc = 0.0; 
   while (1) {
     // track training progress
     if (word_count - last_word_count > 10000) {
+      long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
       if ((debug_mode > 1)) {
@@ -336,10 +337,10 @@ void *TrainModelThread(void *id) {
         printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha,
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
-        printf("avg loss: %f  ", loss/10000.0);
+        printf("avg acc: %f  ", acc/diff);
 	printf("curr dim: %lld\n", embed_current_size);	
         fflush(stdout);
-        loss = 0.0;
+        acc = 0.0;
       }
       alpha = starting_alpha * (1 - word_count_actual / (real)(iter * train_words + 1));
       if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
@@ -382,17 +383,20 @@ void *TrainModelThread(void *id) {
     next_random = next_random * (unsigned long long)25214903917 + 11;
     b = next_random % window; // Samples(!) window size
     // iterate through the context words
+    float avg_word_acc = 0.0;
     for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
 	c = sentence_position - window + a;
 	if (c < 0) continue;
 	if (c >= sentence_length) continue;
 	last_word = sen[c];
 	if (last_word == -1) continue;
-	// only need to initialize dimensions less than current_size + 1 since that's all it can grow                                                                                                 
-	for (c = 0; c < embed_current_size + 1; c++) input_gradient_accumulator[c] = 0.0;
+          
+        int z_probs_size = embed_current_size + 1;  // lock-in value of embed_current_size since its shared globally
+	
+        // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                  	
+        for (c = 0; c < z_probs_size; c++) input_gradient_accumulator[c] = 0.0;
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
-        int z_probs_size = embed_current_size + 1;
 	z_probs = (double *)calloc(z_probs_size, sizeof(double));
 	for (c = 1; c <= z_probs_size-1; c++) {
             float val = compute_energy(input_word_position, context_word_position, c );
@@ -407,13 +411,13 @@ void *TrainModelThread(void *id) {
         //printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
 	
 	// if we sampled z = l+1, increase the number of dimensions
-	if (z_hat == embed_current_size + 1 && z_hat < embed_max_size) {
+	if (z_hat == z_probs_size && z_hat < embed_max_size) {
             embed_current_size++;
             // initialize newly added dimension to be random (not zero)
             for (d = 0; d < vocab_size; d++) {
       	        // embed_current_size-1 because 0-indexed
 	        next_random = next_random * (unsigned long long)25214903917 + 11;
-                context_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
+                context_embed[d * embed_max_size + z_probs_size-2] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
 		//next_random = next_random * (unsigned long long)25214903917 + 11;
                 //input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
             }
@@ -423,22 +427,25 @@ void *TrainModelThread(void *id) {
 	// NEGATIVE SAMPLING CONTEXT WORDS
 	Z_c = 0.0;
 	// need to iterate through the negatives once to compute partition function
-	for (d = 0; d < negative; d++) {
+        double *neg_probs = (double *)calloc(negative, sizeof(double));	
+        for (d = 0; d < negative; d++) {
 	    next_random = next_random * (unsigned long long)25214903917 + 11;
 	    negative_word = table[(next_random >> 16) % table_size];
 	    if (negative_word == 0) negative_word = next_random % (vocab_size - 1) + 1;
 	    if (negative_word == word) continue; // need to initialize to zeros so this line doesn't fuck up
 	    neg_samples[d] = negative_word;
 	    negative_word_position = negative_word * embed_max_size;
-	    Z_c += exp(-compute_energy(input_word_position, negative_word_position, z_hat));
-	  }
+	    neg_probs[d] = exp(-compute_energy(input_word_position, negative_word_position, z_hat));
+            Z_c += neg_probs[d];  
+        }
 	// now add the positive example to Z_c
-	Z_c += exp(-compute_energy(input_word_position, context_word_position, z_hat));
+	double pos_prob = exp(-compute_energy(input_word_position, context_word_position, z_hat));
+        Z_c += pos_prob; 
 	// iterate through negatives again to compute probabilities and perform updates
 	for (d = 0; d < negative; d++){
 	  if (neg_samples[d] > 0){
 	    negative_word_position = neg_samples[d] * embed_max_size;
-	    prob_c = exp(-compute_energy(input_word_position, negative_word_position, z_hat)) / Z_c;
+	    prob_c = neg_probs[d]/Z_c;
 	    for (c = 0; c < z_hat; c++){
 	      // Note: need per-dimension learning rates.  Hack it now with (idx / current_embed_size) factor
 	      // Important!: add to accumulator before updating
@@ -449,9 +456,21 @@ void *TrainModelThread(void *id) {
 	    }
 	  }
 	}
+        free(neg_probs);
+        prob_c = pos_prob/Z_c;
 	// update positive context and add to accumulator
-	prob_c = exp(-compute_energy(input_word_position, context_word_position, z_hat)) / Z_c;
-	loss += prob_c;
+	if (prob_c > 1) {
+          printf("over 1! %f = %f / %f\n", prob_c, exp(-compute_energy(input_word_position, context_word_position, z_hat)), Z_c);
+        }
+        avg_word_acc += prob_c;
+ 	
+	if (prob_c == NAN || prob_c == -NAN) {
+          printf("input_word_position: %lli \n", input_word_position);
+          printf("output_word_position: %lli \n", context_word_position);
+          printf("z_hat: %lli \n", z_hat);
+          printf("Z_c: %f \n", Z_c);
+        }	
+ 
         for (c = 0; c < z_hat; c++){
 	  input_gradient_accumulator[c] += (prob_c - 1.0) * (context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
 	  //float per_dim_alpha = ((alpha * (c+1)) / embed_current_size);
@@ -466,6 +485,7 @@ void *TrainModelThread(void *id) {
 	  input_embed[input_word_position + c] -=  per_dim_alpha * input_gradient_accumulator[c];
         }
       }
+    acc += (avg_word_acc)/(window * 2 + 1 - b);
     sentence_position++;
     if (sentence_position >= sentence_length) {
       sentence_length = 0;
