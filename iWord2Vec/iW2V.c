@@ -384,13 +384,15 @@ void *TrainModelThread(void *id) {
     b = next_random % window; // Samples(!) window size
     // iterate through the context words
     float avg_word_acc = 0.0;
+    int loop_cnt = 0;
     for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
 	c = sentence_position - window + a;
 	if (c < 0) continue;
 	if (c >= sentence_length) continue;
 	last_word = sen[c];
 	if (last_word == -1) continue;
-          
+        
+        ++loop_cnt;  
         int z_probs_size = embed_current_size + 1;  // lock-in value of embed_current_size since its shared globally
 	
         // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                  	
@@ -484,8 +486,8 @@ void *TrainModelThread(void *id) {
 	  float per_dim_alpha = alpha;
 	  input_embed[input_word_position + c] -=  per_dim_alpha * input_gradient_accumulator[c];
         }
-      }
-    acc += (avg_word_acc)/(window * 2 + 1 - b);
+    }
+    acc += (avg_word_acc)/loop_cnt;
     sentence_position++;
     if (sentence_position >= sentence_length) {
       sentence_length = 0;
