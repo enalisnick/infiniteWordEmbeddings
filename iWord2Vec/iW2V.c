@@ -276,6 +276,18 @@ void InitNet() {
     }
 }
 
+// calculate P(z|w,c) distribution (more efficient than calculating energy for every z separately)
+void compute_z_dist(double *dist, long long w_idx, long long c_idx, int curr_z) { 
+  for (int a = 0; a < curr_z; ++a) {
+    double val = -input_embed[w_idx + a]*context_embed[c_idx + a] + log(dim_penalty) + sparsity_weight*pow(input_embed[w_idx + a],2) + sparsity_weight*pow(context_embed[c_idx + a],2);
+    for (int b = a; b <= curr_z; b++) {
+      dist[b] += val;
+    }
+    dist[a] = exp(-dist[a]);
+  }
+  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp(-dist[curr_z]); 
+}
+
 // function to compute E(w, c, z)
 float compute_energy(long long w_idx, long long c_idx, int z){
   long long a;
@@ -400,12 +412,13 @@ void *TrainModelThread(void *id) {
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
 	z_probs = (double *)calloc(z_probs_size, sizeof(double));
-	for (c = 1; c <= z_probs_size-1; c++) {
+	/*for (c = 1; c <= z_probs_size-1; c++) {
             float val = compute_energy(input_word_position, context_word_position, c );
             z_probs[c-1] = exp(-val);
             //printf("c: %lli, E: %f , p: %f \n", c, val, exp(-val)); 
 	}
-        z_probs[z_probs_size-1] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, embed_current_size));
+        z_probs[z_probs_size-1] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, z_probs_size-1));*/
+        compute_z_dist(z_probs, input_word_position, context_word_position, z_probs_size - 1); 
 	//printf("p(last): %f \n", z_probs[embed_current_size]);
 	// no need to normalize, function does it for us
 	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
