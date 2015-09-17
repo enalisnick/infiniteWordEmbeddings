@@ -14,11 +14,11 @@ if __name__ == '__main__':
   k = 50
   num_dims = -1
   embedding_fileName = sys.argv[1]
-  if num_of_args == 3:
+  if num_of_args >= 3:
     k = int(sys.argv[2]) # number of nearest neighbors
-  elif num_of_args == 4:
+  if num_of_args >= 4:
     num_dims = int(sys.argv[3]) # number of dimensions to do similarity over
- 
+   
   ### READ EMBEDDINGS FROM TXT FILE
   embeddings = []
   vocab = []
