@@ -57,7 +57,6 @@ if __name__ == '__main__':
             if exp(running_total) > max_prob:
               z = z_idx+1
               max_prob = exp(running_total)
-          z = z_max
           sims[idx] = 1 - spatial.distance.cosine(word_embedding[:z], other_word_embedding[:z])
           z_vals[idx] = z
       ### get top k most similar 
