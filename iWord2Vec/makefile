@@ -8,4 +8,5 @@ iW2V : iW2V.c
 	$(CC) iW2V.c -o iW2V $(CFLAGS)
 
 clean:
-	rm -rf iW2V
+	rm -rf iW2V iW2V.dSYM *~
+
