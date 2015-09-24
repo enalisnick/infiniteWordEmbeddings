@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
 #include <gsl/gsl_randist.h>
-
 // Global Variables
 #define MAX_STRING 100
 #define MAX_SENTENCE_LENGTH 1000
@@ -17,7 +17,13 @@ struct vocab_word {
   char *word;
 };
 
-char train_file[MAX_STRING], output_file[MAX_STRING];
+// pthread only allows passing of one argument
+typedef struct {
+  int id;
+  bool expand;
+} ThreadArg;
+
+char train_file[MAX_STRING], output_file[MAX_STRING], fixed_dim_output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
 int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
@@ -278,7 +284,7 @@ void InitNet() {
 
 // calculate P(z|w,c) distribution (more efficient than calculating energy for every z separately)
 void compute_z_dist(double *dist, long long w_idx, long long c_idx, int curr_z) { 
-  for (int a = 0; a < curr_z; ++a) {
+  for (int a = 0; a < curr_z; a++) {
     double val = -input_embed[w_idx + a]*context_embed[c_idx + a] + log(dim_penalty) + sparsity_weight*pow(input_embed[w_idx + a],2) + sparsity_weight*pow(context_embed[c_idx + a],2);
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
@@ -317,7 +323,26 @@ void debug_prob(double probs[], int len) {
   printf("*****************\n");	
 }
 
-void *TrainModelThread(void *id) {
+void save_vectors(char *output_file, long long int vocab_size, long long int embed_current_size, struct vocab_word *vocab, real *input_embed) {
+  FILE *fo;
+  fo = fopen(output_file, "wb");
+  // Save the word vectors
+  fprintf(fo, "%lld %lld\n", vocab_size, embed_current_size);
+  long a,b;
+  for (a = 0; a < vocab_size; a++) {
+    fprintf(fo, "%s ", vocab[a].word);
+    // only print the non-zero dimensions
+    for (b = 0; b < embed_current_size; b++) fprintf(fo, "%lf ", input_embed[a * embed_max_size + b]);
+    fprintf(fo, "\n");
+  }
+  fclose(fo);
+}
+
+void *TrainModelThread(void *arg) {
+  ThreadArg *thread_arg = (ThreadArg *)arg;
+  int id = thread_arg->id;
+  bool expand = thread_arg->expand;
+
   long long a, b, d, word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], neg_samples[negative];
   long long input_word_position, context_word_position, negative_word_position, z_hat, c, local_iter = iter;
@@ -411,27 +436,19 @@ void *TrainModelThread(void *id) {
         for (c = 0; c < z_probs_size; c++) input_gradient_accumulator[c] = 0.0;
 	context_word_position = last_word * embed_max_size;
 	// sample z: z_hat ~ p(z | w, c)
-	z_probs = (double *)calloc(z_probs_size, sizeof(double));
-	/*for (c = 1; c <= z_probs_size-1; c++) {
-            float val = compute_energy(input_word_position, context_word_position, c );
-            z_probs[c-1] = exp(-val);
-            //printf("c: %lli, E: %f , p: %f \n", c, val, exp(-val)); 
-	}
-        z_probs[z_probs_size-1] = (dim_penalty / (dim_penalty - 1.0)) * exp(-compute_energy(input_word_position, context_word_position, z_probs_size-1));*/
+	z_probs = (double *)calloc(z_probs_size, sizeof(double));	
         compute_z_dist(z_probs, input_word_position, context_word_position, z_probs_size - 1); 
-	//printf("p(last): %f \n", z_probs[embed_current_size]);
-	// no need to normalize, function does it for us
-	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
-        //debug_prob(z_probs, embed_current_size + 1);
-        //printf("DEBUG: The value of z_hat is: %lld \n", z_hat);
 	
-	// if we sampled z = l+1, increase the number of dimensions
-	if (z_hat == z_probs_size && z_hat < embed_max_size) {
+        // no need to normalize, function does it for us
+	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
+	
+	// if we sampled z = l+1, increase the number of dimensions (only if we are in expand mode)
+	if (expand == true && z_hat == z_probs_size && z_hat < embed_max_size) {
             embed_current_size++;
             // initialize newly added dimension to be random (not zero)
             for (d = 0; d < vocab_size; d++) {
-      	        // embed_current_size-1 because 0-indexed
-	        next_random = next_random * (unsigned long long)25214903917 + 11;
+	        // get random context but let word be initialized to 0
+                next_random = next_random * (unsigned long long)25214903917 + 11;
                 context_embed[d * embed_max_size + z_probs_size-2] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
 		//next_random = next_random * (unsigned long long)25214903917 + 11;
                 //input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
@@ -513,8 +530,7 @@ void *TrainModelThread(void *id) {
 }
 
 void TrainModel() {
-  long a, b;
-  FILE *fo;
+  long a;
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
@@ -524,10 +540,38 @@ void TrainModel() {
   InitNet();
   if (negative > 0) InitUnigramTable();
   start = clock();
-  for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
+  
+  int actual_iter = iter;
+  iter = 10;
+  // fixed-dim training for one epoch
+  printf("Training fixed dim model.\n");
+  for (a = 0; a < num_threads; a++) {
+    ThreadArg arg;
+    arg.id = a;
+    arg.expand = false; 
+    pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
+  }
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-  fo = fopen(output_file, "wb");
-   // Save the word vectors
+  printf("Writing vectors to %s\n", fixed_dim_output_file);
+  save_vectors(fixed_dim_output_file, vocab_size, embed_current_size, vocab, input_embed);
+
+  // Reset training info
+  iter = actual_iter;
+  word_count_actual = 0;
+  alpha = starting_alpha;
+  // expanded-dim training for desired epochs
+  printf("Training expanded dim model\n");
+  for (a = 0; a < num_threads; a++) {
+    ThreadArg arg;
+    arg.id = a;
+    arg.expand = true; 
+    pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
+  }
+  for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+  printf("Writing vectors to %s\n", output_file);
+  save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed); 
+  /*fo = fopen(output_file, "wb");
+  // Save the word vectors
   fprintf(fo, "%lld %lld\n", vocab_size, embed_current_size);
   for (a = 0; a < vocab_size; a++) {
     fprintf(fo, "%s ", vocab[a].word);
@@ -535,7 +579,7 @@ void TrainModel() {
     for (b = 0; b < embed_current_size; b++) fprintf(fo, "%lf ", input_embed[a * embed_max_size + b]);
     fprintf(fo, "\n");
   }
-  fclose(fo);
+  fclose(fo);*/
 }
 
 int ArgPos(char *str, int argc, char **argv) {
@@ -622,6 +666,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-dimPenalty", argc, argv)) > 0) dim_penalty = atoi(argv[i+1]);
   if ((i = ArgPos((char *)"-sparsityWeight", argc, argv)) > 0) sparsity_weight = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-fixed_dim_output", argc, argv)) > 0) strcpy(fixed_dim_output_file, argv[i+1]);
   if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
   if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
