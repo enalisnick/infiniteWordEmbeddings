@@ -33,16 +33,16 @@ if __name__ == '__main__':
         word1_embedding = embeddings[word1_idx]
         word2_embedding = embeddings[word2_idx]
       ### compute how many dimensions to use
-        z = 50
+        z = 0
         max_prob = 0.0
         running_total = 0.
         for w,c in zip(word1_embedding[:z], word2_embedding[:z]):
           running_total += w*c 
-          for z_idx in xrange(z,z_max):
-            running_total += word1_embedding[z_idx]*word2_embedding[z_idx]
-            if exp(running_total) > max_prob:
-              z = z_idx+1
-              max_prob = exp(running_total)
+        for z_idx in xrange(z,z_max):
+          running_total += word1_embedding[z_idx]*word2_embedding[z_idx]
+          if exp(running_total) > max_prob:
+            z = z_idx+1
+            max_prob = exp(running_total)
         w2v_sims.append(1 - spatial.distance.cosine(word1_embedding[:z], word2_embedding[:z]))
       except ValueError:
         continue
