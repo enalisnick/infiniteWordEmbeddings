@@ -3,6 +3,16 @@ from math import exp
 import numpy as np
 from scipy import spatial
 from tabulate import tabulate
+import math
+
+# dot product similarity
+def dot_prod_sim(v1,v2):
+  i = 1
+  total = 0.
+  for w,c in zip(v1,v2):
+    total += w*c 
+
+  return total
 
 if __name__ == '__main__':
   
@@ -47,7 +57,7 @@ if __name__ == '__main__':
           word_embedding = embeddings[word_idx]
           other_word_embedding = embeddings[idx]
           ### compute how many dimensions to use
-          z = 50
+          z = 0
           max_prob = 0.0
           running_total = 0.
           for w,c in zip(word_embedding[:z], other_word_embedding[:z]):
@@ -57,7 +67,8 @@ if __name__ == '__main__':
             if exp(running_total) > max_prob:
               z = z_idx+1
               max_prob = exp(running_total)
-          sims[idx] = 1 - spatial.distance.cosine(word_embedding[:z], other_word_embedding[:z])
+          #sims[idx] = z * (1 - spatial.distance.cosine(word_embedding[:z], other_word_embedding[:z]))
+          sims[idx] = dot_prod_sim(word_embedding[:z], other_word_embedding[:z])
           z_vals[idx] = z
       ### get top k most similar 
       top_k_idxs = sorted(range(vocab_size), key=sims.__getitem__, reverse=True)[:k]
@@ -71,4 +82,3 @@ if __name__ == '__main__':
       #print("#non-zero dims: %d" % (np.count_nonzero(embeddings[word_idx])))
     except ValueError:
       print "There's no embedding for that word.  Try again."
-

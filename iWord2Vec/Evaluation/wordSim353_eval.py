@@ -2,6 +2,7 @@ import sys
 from math import exp
 import numpy as np
 from scipy import spatial
+from find_nearest_neighbors import dot_prod_sim
 
 if __name__ == '__main__':
   ### READ INPUT ARGS
@@ -27,8 +28,8 @@ if __name__ == '__main__':
     for line in f:
       line = line.strip().split(',')
       try:
-        word1_idx = vocab.index(line[0])
-        word2_idx = vocab.index(line[1])
+        word1_idx = vocab.index(line[0].lower())
+        word2_idx = vocab.index(line[1].lower())
         human_sims.append(float(line[2]))
         word1_embedding = embeddings[word1_idx]
         word2_embedding = embeddings[word2_idx]
@@ -43,7 +44,8 @@ if __name__ == '__main__':
           if exp(running_total) > max_prob:
             z = z_idx+1
             max_prob = exp(running_total)
-        w2v_sims.append(1 - spatial.distance.cosine(word1_embedding[:z], word2_embedding[:z]))
+        #w2v_sims.append(z *(1 - spatial.distance.cosine(word1_embedding[:z], word2_embedding[:z])))
+        w2v_sims.append(dot_prod_sim(word1_embedding[:z], word2_embedding[:z]))
       except ValueError:
         continue
 ### sort w2v sims
@@ -53,4 +55,3 @@ if __name__ == '__main__':
   for idx, val in enumerate(sorted_w2v_idxs):
     sum_squ_distances += (idx-val)**2
   print 1.0 - (6*sum_squ_distances)/(n*(n**2 - 1.0))
-
