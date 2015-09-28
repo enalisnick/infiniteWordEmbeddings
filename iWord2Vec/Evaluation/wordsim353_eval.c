@@ -22,13 +22,17 @@ int main(int argc, char **argv) {
   char *vocab;
   double *vectors;
   int is_MEN = 0;
+  int full_dim = 0;
 
   if (argc < 2) {
     printf("Input file not found\n");
     return -1;
   }
   if (argc > 2) {
-    is_MEN = atoi(argv[2]);
+    full_dim = atoi(argv[2]);
+  }
+  if (argc > 3) {
+    is_MEN = atoi(argv[3]);
   }  
   const char *sim_file_name;
   int len;
@@ -43,9 +47,13 @@ int main(int argc, char **argv) {
   strcpy(file_name, argv[1]);
   read_vectors(file_name, &vocab_size, &embed_size, &vocab, &vectors);  // read vocab & vectors from file
  
+  printf("Using word vectors from %s\n", file_name);
+  if (full_dim == 0) {
+    printf("Using prob derived dims\n");
+  } else {
+    printf("Using all dims\n");
+  } 
   printf("Using sim benchmark %s\n", sim_file_name);
-  printf("Using word vectors from %s\n", file_name); 
-
   // Read sim words from file
   FILE *f;
   f = fopen(sim_file_name, "rb"); 
@@ -70,7 +78,12 @@ int main(int argc, char **argv) {
     int idx2 = find_str(vocab, vocab_size, word2);
     // Keep track of valid examples where both words in vocab 
     if (idx1 != -1 && idx2 != -1) {
-      w2v_sim[i].sim = cosine_sim(vectors, embed_size, idx1, idx2); 
+      if (full_dim == 0) {
+        int mode_z = get_mode_z(vectors, embed_size, idx1, idx2);
+        w2v_sim[i].sim = dot_product_sim(vectors, embed_size, idx1, idx2, mode_z); 
+      } else {  
+        w2v_sim[i].sim = cosine_sim(vectors, embed_size, idx1, idx2); 
+      }
       w2v_sim[i].index = valid;
       valid++;
     }

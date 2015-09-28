@@ -26,6 +26,7 @@ int main(int argc, char **argv) {
   char *nn[k];
   for (int i = 0; i < k; i++) nn[i] = (char *)malloc(max_w * sizeof(char));
   double bestd[k];
+  int dim_used[k];
   while (1) {
     printf("Enter word (EXIT to break): ");
     a = 0;
@@ -48,8 +49,8 @@ int main(int argc, char **argv) {
     printf("\nWord: %s  Position in vocabulary: %d\n", str, b); 
     
     // Find nearest-neighbors of word 
-    get_k_sim(vocab, vectors, vocab_size, embed_size, b, k, nn, bestd);
-    print_nn(nn, bestd, k);
+    get_k_sim(vocab, vectors, vocab_size, embed_size, b, k, nn, bestd, dim_used);
+    print_nn(nn, bestd, dim_used, k);
     printf("#Non-zero Dims: %d\n", num_non_zero_dims(vectors, embed_size, b));  
   }
   return 0;
