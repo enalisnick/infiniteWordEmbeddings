@@ -5,6 +5,8 @@
 #include <math.h>
 #include <pthread.h>
 #include <gsl/gsl_randist.h>
+#include "Evaluation/eval_lib.h"
+
 // Global Variables
 #define MAX_STRING 100
 #define MAX_SENTENCE_LENGTH 1000
@@ -23,14 +25,14 @@ typedef struct {
   bool expand;
 } ThreadArg;
 
-char train_file[MAX_STRING], output_file[MAX_STRING], fixed_dim_output_file[MAX_STRING];
+char train_file[MAX_STRING], output_file[MAX_STRING], fixed_dim_output_file[MAX_STRING], fixed_dim_init_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
 int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
 real dim_penalty = 1.1;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
-long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0;
+long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 1, file_size = 0;
 real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
 clock_t start;
@@ -438,7 +440,7 @@ void *TrainModelThread(void *arg) {
 	// sample z: z_hat ~ p(z | w, c)
 	z_probs = (double *)calloc(z_probs_size, sizeof(double));	
         compute_z_dist(z_probs, input_word_position, context_word_position, z_probs_size - 1); 
-	
+        //if (expand == true)  debug_prob(z_probs, z_probs_size);	
         // no need to normalize, function does it for us
 	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
 	
@@ -540,27 +542,28 @@ void TrainModel() {
   InitNet();
   if (negative > 0) InitUnigramTable();
   start = clock();
-  
+ 
   int actual_iter = iter;
-  iter = 10;
-  // fixed-dim training for one epoch
-  printf("Training fixed dim model.\n");
-  for (a = 0; a < num_threads; a++) {
-    ThreadArg arg;
-    arg.id = a;
-    arg.expand = false; 
-    pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
+  if (fixed_dim_iter > 0) {
+    // fixed-dim training
+    iter = fixed_dim_iter;
+    printf("Training fixed dim model for %lld iters \n", iter);
+    for (a = 0; a < num_threads; a++) {
+      ThreadArg arg;
+      arg.id = a;
+      arg.expand = false; 
+      pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
+    }
+    for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+    printf("Writing vectors to %s\n", fixed_dim_output_file);
+    save_vectors(fixed_dim_output_file, vocab_size, embed_current_size, vocab, input_embed);
   }
-  for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-  printf("Writing vectors to %s\n", fixed_dim_output_file);
-  save_vectors(fixed_dim_output_file, vocab_size, embed_current_size, vocab, input_embed);
-
   // Reset training info
   iter = actual_iter;
   word_count_actual = 0;
   alpha = starting_alpha;
   // expanded-dim training for desired epochs
-  printf("Training expanded dim model\n");
+  printf("Training expanded dim model for %lld iters \n", iter);
   for (a = 0; a < num_threads; a++) {
     ThreadArg arg;
     arg.id = a;
@@ -663,7 +666,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-read-vocab", argc, argv)) > 0) strcpy(read_vocab_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
-  if ((i = ArgPos((char *)"-dimPenalty", argc, argv)) > 0) dim_penalty = atoi(argv[i+1]);
+  if ((i = ArgPos((char *)"-dim_penalty", argc, argv)) > 0) dim_penalty = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-sparsityWeight", argc, argv)) > 0) sparsity_weight = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-fixed_dim_output", argc, argv)) > 0) strcpy(fixed_dim_output_file, argv[i+1]);
@@ -672,6 +675,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-fixed_dim_iter", argc, argv)) > 0) fixed_dim_iter = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
