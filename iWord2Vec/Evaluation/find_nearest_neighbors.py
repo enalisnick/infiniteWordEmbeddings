@@ -7,7 +7,6 @@ import math
 
 # dot product similarity
 def dot_prod_sim(v1,v2):
-  i = 1
   total = 0.
   for w,c in zip(v1,v2):
     total += w*c 
