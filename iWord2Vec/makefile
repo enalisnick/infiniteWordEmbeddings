@@ -12,8 +12,8 @@ iW2V : iW2V.c
 find_nearest_neighbors: Evaluation/find_nearest_neighbors.c
 	$(CC) Evaluation/find_nearest_neighbors.c -o Evaluation/find_nearest_neighbors $(CFLAGS)
 
-wordsim353_eval: Evaluation/wordsim353_eval.c
-	$(CG) Evaluation/wordsim353_eval.c -o Evaluation/wordsim353_eval 
+wordsim353_eval: Evaluation/sim_eval.c
+	$(CG) Evaluation/sim_eval.c -o Evaluation/sim_eval 
 
 clean:
 	rm -rf iW2V iW2V.dSYM *~ Evaluation/find_nearest_neighbors Evaluation/wordsim353_eval

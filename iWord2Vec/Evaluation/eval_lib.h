@@ -49,7 +49,8 @@ double cosine_sim(double *vectors, long long embed_size, int idx1, int idx2) {
 
 double dot_product_sim(double *vectors, long long embed_size, int idx1, int idx2, int z) {
   double prod = 0.0;
-  for (int i = 0; i < z; i++) {
+  // '<=' because z is 0-indexed
+  for (int i = 0; i <= z; i++) {
     prod += vectors[idx1 * embed_size + i] * vectors[idx2 * embed_size + i];
   }
   return prod;
