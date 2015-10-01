@@ -21,9 +21,9 @@ if __name__ == '__main__':
 
   ### perform t-SNE   
   X= np.zeros(shape=(K+1, dim))
-  X[0,] = embeddings[vocab.index(word)]
+  X[0,] = embeddings[vocab.index(word)][:num_dims]
   for i, idx in enumerate(top_k_idxs):
-    X[i+1,] = embeddings[idx]
+    X[i+1,] = embeddings[idx][:num_dims]
 
   model = TSNE(n_components=2, random_state=0)
   Y = model.fit_transform(X)
