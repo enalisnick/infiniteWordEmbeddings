@@ -32,7 +32,7 @@ int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
 real dim_penalty = 1.1;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
-long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 1, file_size = 0;
+long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 0, file_size = 0;
 real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
 clock_t start;
@@ -323,6 +323,26 @@ void debug_prob(double probs[], int len) {
     printf("z = %i prob: %f\n", i, probs[i]); 
   }
   printf("*****************\n");	
+}
+
+void print_args() {
+  printf("# TRAINING SETTINGS #\n"); 
+  printf("Train Corpus: %s\n", train_file);
+  printf("Output file: %s\n", output_file);
+  printf("Num. of threads: %d\n", num_threads);
+  printf("Initial dimensionality: %lld\n", embed_current_size);
+  printf("Max dimensionality: %lld\n", embed_max_size); 
+  printf("Context window size: %d\n", window); 
+  printf("Num. of negative samples: %d\n", negative); 
+  printf("Training iterations (epochs): %lld\n", iter); 
+  printf("Learning rate: %f\n", (float)alpha ); 
+  printf("Dimension penalty: %f\n", (float)dim_penalty); 
+  printf("Sparsity weight: %f\n", (float)sparsity_weight);
+  if (fixed_dim_iter > 0) {
+    printf("Fixed dim training iterations (epochs): %lld\n", fixed_dim_iter);
+    printf("Fixed dim output file: %s\n", fixed_dim_output_file);
+  }
+  printf("#####################\n");  
 }
 
 void save_vectors(char *output_file, long long int vocab_size, long long int embed_current_size, struct vocab_word *vocab, real *input_embed) {
@@ -679,6 +699,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
+  print_args();
   TrainModel();
   return 0;
 }
