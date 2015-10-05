@@ -1,4 +1,9 @@
 from math import exp
+from scipy import spatial
+
+### cosine similarity
+def cosine_sim(v1,v2):
+  return (1.0 - spatial.distance.cosine(v1,v2))
 
 ### dot product similarity
 def dot_prod_sim(v1,v2):
@@ -64,7 +69,7 @@ def get_nn(vocab, embeddings, word, K, num_dims=-1):
   return sims, z_vals, top_k_idxs 
 
 ### compute pearson rank correlation for similarity file given
-def get_rank_corr(sim_file, vocab, embeddings):
+def get_rank_corr(sim_file, vocab, embeddings, full_dim):
   w2v_sims = []
   human_sims = []
 
@@ -80,10 +85,12 @@ def get_rank_corr(sim_file, vocab, embeddings):
         human_sims.append(float(line[2]))
         word1_embedding = embeddings[word1_idx]
         word2_embedding = embeddings[word2_idx]
-        ### compute how many dimensions to use
-        z = get_mode_z(word1_embedding, word2_embedding)
-        #w2v_sims.append(z *(1 - spatial.distance.cosine(word1_embedding[:z], word2_embedding[:z])))
-        w2v_sims.append(dot_prod_sim(word1_embedding[:z], word2_embedding[:z]))
+        if full_dim:
+          w2v_sims.append(cosine_sim(word1_embedding, word2_embedding))
+        else:
+          ### compute how many dimensions to use
+          z = get_mode_z(word1_embedding, word2_embedding)
+          w2v_sims.append(dot_prod_sim(word1_embedding[:z], word2_embedding[:z]))
       except ValueError:
         continue
   ### sort w2v sims
