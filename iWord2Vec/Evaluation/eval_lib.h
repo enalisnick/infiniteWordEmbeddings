@@ -38,13 +38,15 @@ int num_non_zero_dims(double *vectors, long long embed_size, int idx) {
   return num;
 }
 
-// requires us to store unit vectors
+// asssuming not storing vectors as unit vectors  
 double cosine_sim(double *vectors, long long embed_size, int idx1, int idx2) {
-  double prod = 0.0;
+  double prod = 0.0, norm1 = 0.0, norm2 = 0.0;
   for (int i = 0; i < embed_size; i++) {
     prod += vectors[idx1 * embed_size + i] * vectors[idx2 * embed_size + i];
+    norm1 += vectors[idx1 * embed_size + i] * vectors[idx1 * embed_size + i];
+    norm2 += vectors[idx2 * embed_size + i] * vectors[idx2 * embed_size + i];
   }
-  return prod;
+  return prod/(sqrt(norm1) * sqrt(norm2));
 }
 
 double dot_product_sim(double *vectors, long long embed_size, int idx1, int idx2, int z) {

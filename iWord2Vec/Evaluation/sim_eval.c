@@ -29,10 +29,10 @@ int main(int argc, char **argv) {
     return -1;
   }
   if (argc > 2) {
-    full_dim = atoi(argv[2]);
+    is_MEN = atoi(argv[2]);
   }
   if (argc > 3) {
-    is_MEN = atoi(argv[3]);
+    full_dim = atoi(argv[3]);
   }  
   const char *sim_file_name;
   int len;
