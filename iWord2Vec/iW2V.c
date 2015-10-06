@@ -646,6 +646,8 @@ int main(int argc, char **argv) {
     printf("\t\tUse text data from <file> to train the model\n");
     printf("\t-output <file>\n");
     printf("\t\tUse <file> to save the resulting word vectors / word clusters\n");
+    printf("\t-fixed_dim_output <file> \n");
+    printf("\t\tUse <file> to save resulting word vectors of fixed dimension training\n");
     printf("\t-initSize <int>\n");
     printf("\t\tSet the initial dimensionality of the word vectors; default is 5\n");
     printf("\t-maxSize <int>\n");
@@ -660,6 +662,8 @@ int main(int argc, char **argv) {
     printf("\t\tUse <int> threads (default 12)\n");
     printf("\t-iter <int>\n");
     printf("\t\tRun more training iterations (default 5)\n");
+    printf("\t-fixed_dim_iter <int>\n");
+    printf("\t\tHow many <int> iterations to run fixed-dimension training (default 0)\n");
     printf("\t-min-count <int>\n");
     printf("\t\tThis will discard words that appear less than <int> times; default is 5\n");
     printf("\t-alpha <float>\n");
