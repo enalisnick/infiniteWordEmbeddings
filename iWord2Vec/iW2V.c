@@ -304,16 +304,44 @@ float compute_energy(long long w_idx, long long c_idx, int z){
   return energy;
 }
 
+
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
 // http://stackoverflow.com/questions/25363450/generating-a-multinomial-distribution
-int sample_from_mult(double probs[], const gsl_rng* r){ // always sample 1 value
-  size_t k = embed_current_size + 1;
+int sample_from_mult(double probs[], int k, const gsl_rng* r){ // always sample 1 value
   unsigned int mult_op[k];
   gsl_ran_multinomial(r, k, 1, probs, mult_op);
   for (int idx=1; idx<=k; idx++){
     if (mult_op[idx-1]==1) return idx;
   }
   return 0;
+}
+
+// sample from multinomial distribution or mode depending
+int sample_from_mult_or_mode(double probs[], int k, const gsl_rng* r, float beta) {
+  float t = (float)rand()/(float)(RAND_MAX);
+  int idx = -1;
+  if (t <= beta) { 
+    idx = sample_from_mult(probs, k, r);
+    //printf("mult: %d\n", idx);
+  }
+  else {
+    double mean = 0.0, sum = 0.0;
+    // sum for normalizing probability
+    for (int i = 0; i < k; i++) {
+      sum += probs[i];
+    }
+    for (int i = 1; i <= k; i++) {
+      /*if (probs[i-1] > max) {
+        max = probs[i-1];
+        idx = i; 
+      }*/
+      mean += (probs[i-1]/sum) * i;
+    }
+    //printf("mean: %lf\n", mean);
+    idx = (int)round(mean);
+    //printf("mean: %d\n", idx);
+  }
+  return idx;
 }
 
 void debug_prob(double probs[], int len) {
@@ -457,26 +485,34 @@ void *TrainModelThread(void *arg) {
         // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                  	
         for (c = 0; c < z_probs_size; c++) input_gradient_accumulator[c] = 0.0;
 	context_word_position = last_word * embed_max_size;
-	// sample z: z_hat ~ p(z | w, c)
-	z_probs = (double *)calloc(z_probs_size, sizeof(double));	
-        compute_z_dist(z_probs, input_word_position, context_word_position, z_probs_size - 1); 
-        //if (expand == true)  debug_prob(z_probs, z_probs_size);	
-        // no need to normalize, function does it for us
-	z_hat = sample_from_mult(z_probs, r2);  //still need to add one? 
-	
-	// if we sampled z = l+1, increase the number of dimensions (only if we are in expand mode)
-	if (expand == true && z_hat == z_probs_size && z_hat < embed_max_size) {
-            embed_current_size++;
-            // initialize newly added dimension to be random (not zero)
-            for (d = 0; d < vocab_size; d++) {
-	        // get random context but let word be initialized to 0
-                next_random = next_random * (unsigned long long)25214903917 + 11;
-                context_embed[d * embed_max_size + z_probs_size-2] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
-		//next_random = next_random * (unsigned long long)25214903917 + 11;
-                //input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
-            }
+	        
+        if (expand == true) {
+          // sample z: z_hat ~ p(z | w, c)
+	  z_probs = (double *)calloc(z_probs_size, sizeof(double));	
+
+          compute_z_dist(z_probs, input_word_position, context_word_position, z_probs_size - 1); 
+          //if (expand == true)  debug_prob(z_probs, z_probs_size);	
+          // no need to normalize, function does it for us
+	  z_hat = sample_from_mult(z_probs, z_probs_size, r2);  //still need to add one? 
+          //z_hat = sample_from_mult_or_mode(z_probs, z_probs_size, r2, 1.5);	
+
+	  // if we sampled z = l+1, increase the number of dimensions (only if we are in expand mode)
+	  if (z_hat == z_probs_size && z_hat < embed_max_size) {
+	      embed_current_size++;
+	      // initialize newly added dimension to be random (not zero)
+	      for (d = 0; d < vocab_size; d++) {
+		  // get random context but let word be initialized to 0
+		  next_random = next_random * (unsigned long long)25214903917 + 11;
+		  context_embed[d * embed_max_size + z_probs_size-1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
+		  //next_random = next_random * (unsigned long long)25214903917 + 11;
+		  //input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
+	      }
+	  }
+          free(z_probs);
         }
-	free(z_probs);
+        else {
+          z_hat = z_probs_size - 1;
+        }
 	
 	// NEGATIVE SAMPLING CONTEXT WORDS
 	Z_c = 0.0;
@@ -631,7 +667,7 @@ void multinom_unit_test(){
   
   double x[] = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
   for (int w=0; w<10; w++){
-    int y = sample_from_mult(x, r2);
+    int y = sample_from_mult(x, 6, r2);
     printf("Sampled idx: %i \n", y);
   }
 }
