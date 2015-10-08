@@ -25,7 +25,7 @@ typedef struct {
   bool expand;
 } ThreadArg;
 
-char train_file[MAX_STRING], output_file[MAX_STRING], fixed_dim_output_file[MAX_STRING], fixed_dim_init_file[MAX_STRING];
+char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING], fixed_dim_output_file[MAX_STRING], fixed_dim_init_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
 int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
@@ -628,17 +628,8 @@ void TrainModel() {
   }
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   printf("Writing vectors to %s\n", output_file);
-  save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed); 
-  /*fo = fopen(output_file, "wb");
-  // Save the word vectors
-  fprintf(fo, "%lld %lld\n", vocab_size, embed_current_size);
-  for (a = 0; a < vocab_size; a++) {
-    fprintf(fo, "%s ", vocab[a].word);
-    // only print the non-zero dimensions
-    for (b = 0; b < embed_current_size; b++) fprintf(fo, "%lf ", input_embed[a * embed_max_size + b]);
-    fprintf(fo, "\n");
-  }
-  fclose(fo);*/
+  save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
+  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 }
 
 int ArgPos(char *str, int argc, char **argv) {
@@ -681,9 +672,11 @@ int main(int argc, char **argv) {
     printf("\t-train <file>\n");
     printf("\t\tUse text data from <file> to train the model\n");
     printf("\t-output <file>\n");
-    printf("\t\tUse <file> to save the resulting word vectors / word clusters\n");
+    printf("\t\tUse <file> to save the resulting word vectors\n");
     printf("\t-fixed_dim_output <file> \n");
     printf("\t\tUse <file> to save resulting word vectors of fixed dimension training\n");
+    printf("\t-contextOutput <file>\n");
+    printf("\t\tUse <file> to save the resulting *context* vectors\n");
     printf("\t-initSize <int>\n");
     printf("\t\tSet the initial dimensionality of the word vectors; default is 5\n");
     printf("\t-maxSize <int>\n");
@@ -713,7 +706,7 @@ int main(int argc, char **argv) {
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
     printf("\nExamples:\n");
-    printf("./iW2V -train data.txt -output vec.txt -initSize 5 -maxSize 2000 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
+    printf("./iW2V -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 5 -maxSize 2000 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
     return 0;
   }
   output_file[0] = 0;
@@ -729,6 +722,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-dim_penalty", argc, argv)) > 0) dim_penalty = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-sparsityWeight", argc, argv)) > 0) sparsity_weight = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-contextOutput", argc, argv)) > 0) strcpy(context_output_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-fixed_dim_output", argc, argv)) > 0) strcpy(fixed_dim_output_file, argv[i+1]);
   if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
