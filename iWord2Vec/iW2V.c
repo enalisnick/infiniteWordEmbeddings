@@ -574,7 +574,7 @@ void *TrainModelThread(void *arg) {
 	for (c = 0; c < z_hat; c++) {
           //float per_dim_alpha = (1.0/(negative+1.0))*((alpha * (c+1)) / embed_current_size);
 	  float per_dim_alpha = alpha;
-	  input_embed[input_word_position + c] -=  per_dim_alpha * input_gradient_accumulator[c];
+	  input_embed[input_word_position + c] -=  per_dim_alpha * 1.0/(negative+1.0) * input_gradient_accumulator[c];
         }
     }
     acc += (avg_word_acc)/loop_cnt;
