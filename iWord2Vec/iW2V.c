@@ -498,15 +498,17 @@ void *TrainModelThread(void *arg) {
 
 	  // if we sampled z = l+1, increase the number of dimensions (only if we are in expand mode)
 	  if (z_hat == z_probs_size && z_hat < embed_max_size) {
+            if (embed_current_size < z_probs_size) { // if this dimension has not already been added by another thread
 	      embed_current_size++;
 	      // initialize newly added dimension to be random (not zero)
 	      for (d = 0; d < vocab_size; d++) {
-		  // get random context but let word be initialized to 0
-		  next_random = next_random * (unsigned long long)25214903917 + 11;
-		  context_embed[d * embed_max_size + z_probs_size-1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
-		  //next_random = next_random * (unsigned long long)25214903917 + 11;
-		  //input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
+	        // get random context but let word be initialized to 0
+		next_random = next_random * (unsigned long long)25214903917 + 11;
+		context_embed[d * embed_max_size + z_probs_size-1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
+		//next_random = next_random * (unsigned long long)25214903917 + 11;
+		//input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
 	      }
+            }
 	  }
           free(z_probs);
         }
@@ -629,7 +631,7 @@ void TrainModel() {
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   printf("Writing vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
-  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
+  if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 }
 
 int ArgPos(char *str, int argc, char **argv) {
