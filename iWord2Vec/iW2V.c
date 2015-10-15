@@ -31,7 +31,7 @@ struct vocab_word *vocab;
 int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
 real dim_penalty = 1.1;
 int *vocab_hash;
-long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
+long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 600, embed_current_size = 5;
 long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 0, file_size = 0;
 real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
@@ -263,13 +263,8 @@ void InitNet() {
   a = posix_memalign((void **)&context_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
   if (context_embed == NULL) {printf("Memory allocation failed\n"); exit(1);}
   for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
-      if (b < embed_current_size){
-	next_random = next_random * (unsigned long long)25214903917 + 11;
-	context_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
-      }
-      else{
-	context_embed[a * embed_max_size + b] = 0.0;
-      }
+      next_random = next_random * (unsigned long long)25214903917 + 11;
+      context_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
     }
   // initialize input embeddings
   a = posix_memalign((void **)&input_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
@@ -499,15 +494,7 @@ void *TrainModelThread(void *arg) {
 	  // if we sampled z = l+1, increase the number of dimensions (only if we are in expand mode)
 	  if (z_hat == z_probs_size && z_hat < embed_max_size) {
             if (embed_current_size < z_probs_size) { // if this dimension has not already been added by another thread
-	      embed_current_size++;
-	      // initialize newly added dimension to be random (not zero)
-	      for (d = 0; d < vocab_size; d++) {
-	        // get random context but let word be initialized to 0
-		next_random = next_random * (unsigned long long)25214903917 + 11;
-		context_embed[d * embed_max_size + z_probs_size-1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
-		//next_random = next_random * (unsigned long long)25214903917 + 11;
-		//input_embed[d * embed_max_size + embed_current_size - 1] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
-	      }
+	      embed_current_size++; 
             }
 	  }
           free(z_probs);
