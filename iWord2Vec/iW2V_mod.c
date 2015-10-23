@@ -298,21 +298,14 @@ float compute_energy(long long w_idx, long long c_idx, int z){
   -> curr_z: current number of dimensions 
 */
 void compute_z_dist(double *dist, long long w_idx, long long c_idx, int curr_z) { 
-  double norm = 0;
   for (int a = 0; a < curr_z; a++) {
     double val = -input_embed[w_idx + a]*context_embed[c_idx + a] + log(dim_penalty) + sparsity_weight*pow(input_embed[w_idx + a],2) + sparsity_weight*pow(context_embed[c_idx + a],2);
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
     dist[a] = exp(-dist[a]);
-    norm += dist[a];
   }
   dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp(-dist[curr_z]);
-  norm += dist[curr_z];
-
-  for (int a = 0; a <= curr_z; a++) {
-    dist[a] /= norm;
-  } 
 }
 
 /* 
@@ -406,27 +399,6 @@ void debug_prob(double probs[], int len) {
   }
   printf("*****************\n");	
 }
-
-/*void debug_val(double x, int curr_z) {
-  if (isnan(x)) {
-    printf("input embed is NaN \n");
-    printf("curr_z: %lld\n", curr_z);
-    printf("context_val: %lf\n", context_val);
-    printf("prob_c: %lf\n", prob_c);
-    printf("log2: %lf\n", log2(prob_c + 0.00001));
-    printf("context sum: %lf\n", context_sum);
-    printf("-------------------\n");
-  }
-  else if (isinf(x)) {
-    printf("input embed is inf \n");
-    printf("curr_z: %lld\n", curr_z);
-    printf("context_val: %lf\n", context_val);
-    printf("prob_c: %lf\n", prob_c);
-    printf("log2: %lf\n", log2(prob_c + 0.00001));
-    printf("context sum: %lf\n", context_sum);
-    printf("-------------------\n");
-  }
-}*/
 
 void print_args() {
   printf("# TRAINING SETTINGS #\n"); 
@@ -597,10 +569,19 @@ void *TrainModelThread(void *arg) {
         else {
           z_hat = z_probs_size - 1; //TODO: this should be array of numbers
         }
-
+        
         // NEGATIVE SAMPLING CONTEXT WORDS 
-        // need to iterate through the negatives once to compute partition function 
+        for (d = 0; d < negative; d++) {
+	  next_random = next_random * (unsigned long long)25214903917 + 11;
+	  negative_word = table[(next_random >> 16) % table_size];
+	  if (negative_word == 0) negative_word = next_random % (vocab_size - 1) + 1;
+	  if (negative_word == word) continue; // need to initialize to zeros so this line doesn't fuck up
+	  neg_samples[d] = negative_word;
+        }
+
         real *context_gradient_accumulator = (real *) calloc(z_probs_size, sizeof(double)); 
+        real *neg_context_gradient_accumulator = (real *) calloc(negative * z_probs_size, sizeof(double));
+        // CALCULATE GRADIENT FOR EACH SAMPLE 
         for (int k = 0; k < num_z_samples; k++) { 
           real *input_gradient = (real *) calloc(z_probs_size, sizeof(double));
           real prob_c = 0, Z_c = 0;
@@ -609,18 +590,10 @@ void *TrainModelThread(void *arg) {
           double *neg_probs = (double *) calloc(negative, sizeof(double)); // neg context probs
 	  double pos_prob = 0.0; // positive context prob
 	  float per_dim_alpha = alpha/num_z_samples; 
-	  if (curr_z == z_probs_size) {
-            per_dim_alpha *= (dim_penalty / (dim_penalty - 1.0)); 
-          }
-          for (d = 0; d < negative; d++) {
-	      next_random = next_random * (unsigned long long)25214903917 + 11;
-	      negative_word = table[(next_random >> 16) % table_size];
-	      if (negative_word == 0) negative_word = next_random % (vocab_size - 1) + 1;
-	      if (negative_word == word) continue; // need to initialize to zeros so this line doesn't fuck up
-	      neg_samples[d] = negative_word;
-	      negative_word_position = negative_word * embed_max_size;
-	      neg_probs[d] = exp(-compute_energy(input_word_position, negative_word_position, curr_z));
-	      Z_c += neg_probs[d];  
+          for (d = 0; d < negative; d++) { 
+	    negative_word_position = neg_samples[d] * embed_max_size;
+	    neg_probs[d] = exp(-compute_energy(input_word_position, negative_word_position, curr_z));
+	    Z_c += neg_probs[d];  
 	  }
 	  // now add the positive example to Z_c
 	  pos_prob = exp(-compute_energy(input_word_position, context_word_position, curr_z));
@@ -631,20 +604,19 @@ void *TrainModelThread(void *arg) {
 	    if (neg_samples[d] > 0){
 	      negative_word_position = neg_samples[d] * embed_max_size;
 	      prob_c = neg_probs[d]/Z_c;
-	      for (c = 0; c < curr_z; c++){
+	      for (c = 0; c < curr_z; c++) {
 		// Important!: add to accumulator before updating
 		input_gradient[c] += prob_c * (context_embed[negative_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c]);
-		context_embed[negative_word_position + c] -= per_dim_alpha * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
+		neg_context_gradient_accumulator[d * z_probs_size + c] += per_dim_alpha * prob_c * (input_embed[input_word_position + c] - sparsity_weight*2*context_embed[negative_word_position + c]);
 	      }
 	    }
 	  }
-	  // update positive context and add to accumulator 
+          
           prob_c = pos_prob/Z_c;
 	  avg_word_acc += prob_c;
-          
-          // positive context gradient	 
+          // positive context and input gradient	 
 	  for (c = 0; c < curr_z; c++) {
-            double input_sum = 0.0, context_sum = 0.0; //input_pos_context_grad = 0.0; 
+            double input_sum = 0.0, context_sum = 0.0;  
             double input_deriv = context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c];
             double context_deriv = input_embed[input_word_position + c] -  sparsity_weight*2*context_embed[context_word_position + c];
 
@@ -672,12 +644,17 @@ void *TrainModelThread(void *arg) {
           free(input_gradient); 
         }
         
-        // apply gradient update to input and positive context
+        // apply gradient update to input, positive & negative context
         for (c = 0; c < z_probs_size; c++) {
           input_embed[input_word_position + c] -= input_gradient_accumulator[c];
           context_embed[context_word_position + c] -= context_gradient_accumulator[c]; 
+          for (d = 0; d < negative; d++) {
+            negative_word_position = neg_samples[d] * embed_max_size;
+            context_embed[negative_word_position + c] -= neg_context_gradient_accumulator[d * z_probs_size + c];
+          }
         }
         free(context_gradient_accumulator);
+        free(neg_context_gradient_accumulator);
         free(z_vals);   
     }
     free(values_z_given_w);
