@@ -460,7 +460,7 @@ void *TrainModelThread(void *arg) {
   int *z_vals; // sampled z values  
   long long *context = (long long *)calloc(2*window+1, sizeof(long long)); // stores positive context  
   double *values_z_given_w; 
-  real *input_gradient_accumulator = (real *)calloc(embed_max_size, sizeof(real));
+  double *input_gradient_accumulator = (double *)calloc(embed_max_size, sizeof(double));
   float acc = 0.0; 
   float running_avg = 0.0;
   while (1) {
@@ -551,13 +551,12 @@ void *TrainModelThread(void *arg) {
         context_prob[j] = compute_energy(input_word_position, pos_context_position, i); 
         norm += context_prob[j];
       }
-      
       // sum_{c_v} [p(c_v|w_i,z) * (c_v * 2w_i)]
       double sum = 0; 
       for (int j = 0; j < true_context_size; j++) {
         long long pos_context_position = context[j] * embed_max_size;
         sum += (context_prob[j]/norm) * (context_embed[pos_context_position + i] - sparsity_weight*2*input_embed[input_word_position + i]); 
-        positive_context_deriv[j * true_context_size + i] =  (context_prob[j]/norm) * (input_embed[input_word_position + i] - sparsity_weight*2*context_embed[pos_context_position + i]);
+        positive_context_deriv[j * z_probs_size + i] =  (context_prob[j]/norm) * (input_embed[input_word_position + i] - sparsity_weight*2*context_embed[pos_context_position + i]);
       }
       positive_context_fixed_sum[i] = sum;
     }
@@ -566,7 +565,7 @@ void *TrainModelThread(void *arg) {
     // Taking care of l+1 case for both
     positive_context_fixed_sum[z_probs_size - 1] = (dim_penalty / (dim_penalty - 1.0)) * positive_context_fixed_sum[z_probs_size - 2];
     for (int j = 0; j < true_context_size; j++) {
-      positive_context_deriv[j * true_context_size + z_probs_size-1] = (dim_penalty / (dim_penalty - 1.0)) * positive_context_deriv[j * true_context_size + z_probs_size-2];
+      positive_context_deriv[j * z_probs_size + z_probs_size-1] = (dim_penalty / (dim_penalty - 1.0)) * positive_context_deriv[j * z_probs_size + z_probs_size-2];
     } 
  
     // iterate through the context words
@@ -599,12 +598,12 @@ void *TrainModelThread(void *arg) {
 	  neg_samples[d] = negative_word;
         }
 
-        real *context_gradient_accumulator = (real *) calloc(z_probs_size, sizeof(double)); 
-        real *neg_context_gradient_accumulator = (real *) calloc(negative * z_probs_size, sizeof(double));
+        double *context_gradient_accumulator = (double *) calloc(z_probs_size, sizeof(double)); 
+        double *neg_context_gradient_accumulator = (double *) calloc(negative * z_probs_size, sizeof(double));
         // CALCULATE GRADIENT FOR EACH SAMPLE 
         for (int k = 0; k < num_z_samples; k++) { 
-          real *input_gradient = (real *) calloc(z_probs_size, sizeof(double));
-          real prob_c = 0, Z_c = 0;
+          double *input_gradient = (double *) calloc(z_probs_size, sizeof(double));
+          double prob_c = 0, Z_c = 0;
           int curr_z = z_vals[k];
           
           double *neg_probs = (double *) calloc(negative, sizeof(double)); // neg context probs
@@ -677,9 +676,9 @@ void *TrainModelThread(void *arg) {
         free(neg_context_gradient_accumulator);
         free(z_vals);   
     }
+    free(values_z_given_w);
     free(positive_context_fixed_sum);
     free(positive_context_deriv);
-    free(values_z_given_w);
     
     acc += (avg_word_acc)/(a*num_z_samples);
     sentence_position++; 
