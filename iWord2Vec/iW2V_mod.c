@@ -644,7 +644,7 @@ void *TrainModelThread(void *arg) {
               if (d == curr_z - 1) is_sampled_z = 1; 
               input_sum += (is_sampled_z - (values_z_given_w[d]/z_given_w_norm)) * positive_context_fixed_sum[d];
 	      
-              context_sum += (is_sampled_z - (values_z_given_w[d]/z_given_w_norm)) * positive_context_deriv[a * true_context_size + d]; 
+              context_sum += (is_sampled_z - (values_z_given_w[d]/z_given_w_norm)) * positive_context_deriv[a * z_probs_size + d]; 
 	    }
 	    input_gradient[c] += ((prob_c - 1.0) * input_deriv);
             input_gradient_accumulator[c] += per_dim_alpha * ((1.0/(negative+1.0)) * input_gradient[c] + (log(prob_c + epsilon) - running_avg) * input_sum); 
