@@ -537,18 +537,38 @@ void *TrainModelThread(void *arg) {
     // these two values together encode p(z|w) 
     values_z_given_w = (double *) calloc(z_probs_size, sizeof(double));
     double z_given_w_norm = compute_z_given_w(word, context, values_z_given_w, true_context_size, z_probs_size-1);
-   
-    // calculate sum necessary for gradient for input
+       
+    // calculate sum necessary for gradient for log(p(z_m|w_i)) with respect to input
+    // and calc necessary for gradient for log(p(z_m|w_i)) with respect to context
     double *positive_context_fixed_sum = (double *) calloc(z_probs_size, sizeof(double)); 
-    for (int i = 0; i < z_probs_size; i++) {
-      double sum = 0;
+    double *positive_context_deriv = (double *) calloc(true_context_size * z_probs_size, sizeof(double));
+    double *context_prob = (double *) calloc(true_context_size, sizeof(double));
+    for (int i = 0; i < z_probs_size-1; i++) {
+      // calculate p(c_v|w_i,z)
+      double norm = 0;
       for (int j = 0; j < true_context_size; j++) {
         long long pos_context_position = context[j] * embed_max_size;
-        sum += context_embed[pos_context_position + i] - sparsity_weight*2*input_embed[input_word_position + i]; 
+        context_prob[j] = compute_energy(input_word_position, pos_context_position, i); 
+        norm += context_prob[j];
+      }
+      
+      // sum_{c_v} [p(c_v|w_i,z) * (c_v * 2w_i)]
+      double sum = 0; 
+      for (int j = 0; j < true_context_size; j++) {
+        long long pos_context_position = context[j] * embed_max_size;
+        sum += (context_prob[j]/norm) * (context_embed[pos_context_position + i] - sparsity_weight*2*input_embed[input_word_position + i]); 
+        positive_context_deriv[j * true_context_size + i] =  (context_prob[j]/norm) * (input_embed[input_word_position + i] - sparsity_weight*2*context_embed[pos_context_position + i]);
       }
       positive_context_fixed_sum[i] = sum;
+    }
+    free(context_prob);
+ 
+    // Taking care of l+1 case for both
+    positive_context_fixed_sum[z_probs_size - 1] = (dim_penalty / (dim_penalty - 1.0)) * positive_context_fixed_sum[z_probs_size - 2];
+    for (int j = 0; j < true_context_size; j++) {
+      positive_context_deriv[j * true_context_size + z_probs_size-1] = (dim_penalty / (dim_penalty - 1.0)) * positive_context_deriv[j * true_context_size + z_probs_size-2];
     } 
-    
+ 
     // iterate through the context words
     float avg_word_acc = 0.0;
     for (a = 0; a < true_context_size; a++) {	
@@ -623,9 +643,9 @@ void *TrainModelThread(void *arg) {
             for (int d = c; d < z_probs_size; d++) { 
 	      double is_sampled_z = 0;
               if (d == curr_z - 1) is_sampled_z = 1; 
-              input_sum += (is_sampled_z - (values_z_given_w[d]/z_given_w_norm)) * positive_context_fixed_sum[c];
+              input_sum += (is_sampled_z - (values_z_given_w[d]/z_given_w_norm)) * positive_context_fixed_sum[d];
 	      
-              context_sum += (is_sampled_z - (values_z_given_w[d]/z_given_w_norm)) * context_deriv; 
+              context_sum += (is_sampled_z - (values_z_given_w[d]/z_given_w_norm)) * positive_context_deriv[a * true_context_size + d]; 
 	    }
 	    input_gradient[c] += ((prob_c - 1.0) * input_deriv);
             input_gradient_accumulator[c] += per_dim_alpha * ((1.0/(negative+1.0)) * input_gradient[c] + (log(prob_c + epsilon) - running_avg) * input_sum); 
@@ -657,8 +677,10 @@ void *TrainModelThread(void *arg) {
         free(neg_context_gradient_accumulator);
         free(z_vals);   
     }
-    free(values_z_given_w);
     free(positive_context_fixed_sum);
+    free(positive_context_deriv);
+    free(values_z_given_w);
+    
     acc += (avg_word_acc)/(a*num_z_samples);
     sentence_position++; 
     if (sentence_position >= sentence_length) {
