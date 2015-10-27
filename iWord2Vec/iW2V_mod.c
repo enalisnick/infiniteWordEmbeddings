@@ -560,7 +560,7 @@ void *TrainModelThread(void *arg) {
       float normConst_c_given_w_z = 0;
       for (int j = 0; j < pos_context_counter; j++) {
         long long pos_context_position = pos_context_store[j] * embed_max_size;
-        prob_c_given_w_z[j] = compute_energy(input_word_position, pos_context_position, i+1); 
+        prob_c_given_w_z[j] = exp(-compute_energy(input_word_position, pos_context_position, i+1)); 
         normConst_c_given_w_z += prob_c_given_w_z[j];
       }
       // sum_{c_v} [p(c_v|w_i,z) * (c_v * 2w_i)]
@@ -596,8 +596,6 @@ void *TrainModelThread(void *arg) {
         if (expand == true) {
           // sample z: z_hat ~ p(z | w) and expand if necessary 
           z_hat = sample_from_mult_list(unnormProbs_z_given_w, z_probs_size, z_vals, num_z_samples, r2);  // no need to normalize, function does it for us 
-          //debug_prob(unnormProbs_z_given_w, z_probs_size); 
-          //printf("z_hat: %d\n", z_hat);
           if (z_hat == z_probs_size && embed_current_size < z_probs_size && z_hat < embed_max_size) {
 	    embed_current_size++; 
 	  }
