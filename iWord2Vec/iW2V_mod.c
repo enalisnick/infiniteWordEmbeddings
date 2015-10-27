@@ -272,6 +272,7 @@ void InitNet() {
   // initialize input embeddings
   a = posix_memalign((void **)&input_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
   for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
+      // only initialize first few dims so we can tell the true vector length
       if (b < embed_current_size){
 	next_random = next_random * (unsigned long long)25214903917 + 11;
 	input_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
