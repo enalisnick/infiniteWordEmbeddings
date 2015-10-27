@@ -321,11 +321,13 @@ double compute_z_given_w(long long word, long long *context, double *values_z_gi
   // compute e^(-E(w,c,z)) for z = 1,...,curr_z,curr_z+1 for every context c
   long long added_z = curr_z + 1;
   long long w_idx = word * embed_max_size;
+  // create array of size 1 x (n_dims * n_context_words)
   double *z_dist_list = (double *) calloc(true_context_size * added_z, sizeof(double)); 
   for (int s = 0; s < true_context_size; s++) {
     long long c_idx = context[s] * embed_max_size;  
     compute_z_dist(z_dist_list + s * added_z, w_idx, c_idx, curr_z); 
   }
+  // compute_z_dist should now have the prob. of each dim for every context word
 
   // debug
   /*printf("word=%s\n", vocab[word].word);
@@ -363,6 +365,12 @@ int sample_from_mult(double probs[], int k, const gsl_rng* r){ // always sample 
 }
 
 // Samples N values of z_hat and returns in vals list and returns the mode of samples 
+// Params:
+// probs -- unnormalized probabilities
+// k -- l+1 (size of current embedding + 1)
+// N -- number of samples to draw
+// vals -- N-size array containing the sampled values
+// r -- random number generator 
 int sample_from_mult_list(double probs[], int k, int vals[], int N, const gsl_rng* r) {
   unsigned int mult_op[k];
   gsl_ran_multinomial(r, k, N, probs, mult_op); // returns array of size N with amount of each value sampled 
@@ -383,7 +391,7 @@ int sample_from_mult_list(double probs[], int k, int vals[], int N, const gsl_rn
   return max_idx;
 }
 
-int get_mean(int vals[], int N) {
+int get_mode(int vals[], int N) {
   double max = 0;
   for (int i = 0; i<N; i++) {
     if (max < vals[i]) max = vals[i];
@@ -459,7 +467,7 @@ void *TrainModelThread(void *arg) {
   gsl_rng_set (r2, Seed2);
  
   int *z_vals; // sampled z values  
-  long long *context = (long long *)calloc(2*window+1, sizeof(long long)); // stores positive context  
+  long long *pos_context_store = (long long *)calloc(2*window+1, sizeof(long long)); // stores positive context  
   double *values_z_given_w; 
   double *input_gradient_accumulator = (double *)calloc(embed_max_size, sizeof(double));
   float acc = 0.0; 
@@ -524,25 +532,25 @@ void *TrainModelThread(void *arg) {
     int z_probs_size = embed_current_size + 1;  // lock-in value of embed_current_size for thread since its shared globally
  
     // Get actual valid context
-    int true_context_size = 0; // size of actual context
+    int pos_context_counter = 0; // size of actual context
     for (a = b; a < window * 2 + 1; a++) if (a != window) {
       c = sentence_position - window + a;
       if (c < 0) continue;
       if (c >= sentence_length) continue;
       last_word = sen[c];
       if (last_word == -1) continue;
-      context[true_context_size] = last_word;
-      true_context_size++; 
+      pos_context_store[pos_context_counter] = last_word;
+      pos_context_counter++; 
     }
 
     // these two values together encode p(z|w) 
-    values_z_given_w = (double *) calloc(z_probs_size, sizeof(double));
-    double z_given_w_norm = compute_z_given_w(word, context, values_z_given_w, true_context_size, z_probs_size-1);
+    unnormProbs_z_given_w = (double *) calloc(z_probs_size, sizeof(double));
+    double normConst_z_given_w = compute_z_given_w(word, pos_context_store, unnormProbs_z_given_w, pos_context_counter, z_probs_size-1);
        
     // calculate sum necessary for gradient for log(p(z_m|w_i)) with respect to input
     // and calc necessary for gradient for log(p(z_m|w_i)) with respect to context
     double *positive_context_fixed_sum = (double *) calloc(z_probs_size, sizeof(double)); 
-    double *positive_context_deriv = (double *) calloc(true_context_size * z_probs_size, sizeof(double));
+    double *positive_context_deriv = (double *) calloc(pos_context_counter * z_probs_size, sizeof(double));
     double *context_prob = (double *) calloc(true_context_size, sizeof(double));
     for (int i = 0; i < z_probs_size-1; i++) {
       // calculate p(c_v|w_i,z)
