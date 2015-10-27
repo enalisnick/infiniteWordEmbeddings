@@ -548,7 +548,7 @@ void *TrainModelThread(void *arg) {
       double normConst_c_given_w_z = 0;
       for (int j = 0; j < pos_context_counter; j++) {
         long long pos_context_position = pos_context_store[j] * embed_max_size;
-        prob_c_given_w_z[j] = compute_energy(input_word_position, pos_context_position, i); 
+        prob_c_given_w_z[j] = compute_energy(input_word_position, pos_context_position, i+1); 
         normConst_c_given_w_z += prob_c_given_w_z[j];
       }
       // sum_{c_v} [p(c_v|w_i,z) * (c_v * 2w_i)]
