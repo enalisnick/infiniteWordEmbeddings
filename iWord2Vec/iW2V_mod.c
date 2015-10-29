@@ -655,16 +655,24 @@ void *TrainModelThread(void *arg) {
           prob_c = unnorm_pos_prob/Z_c;
 	  log_prob_per_word += -log(prob_c + epsilon);
           // positive context and input gradient	 
-	  for (c = 0; c < curr_z; c++) {
+	  for (int j = 0; j < curr_z; j++) {
             float input_sum = 0.0, context_sum = 0.0;  
-            float input_deriv = context_embed[context_word_position + c] - sparsity_weight*2*input_embed[input_word_position + c];
-            float context_deriv = input_embed[input_word_position + c] -  sparsity_weight*2*context_embed[context_word_position + c];
+            float input_deriv = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
+            float context_deriv = input_embed[input_word_position + j] -  sparsity_weight*2*context_embed[context_word_position + j];
 	    // note: local_embed_size_plus_one wasn't incremented if we expanded?
 	    // but curr_z could be l+1--that seems fucked
 	    // should only sum to l? --- No, second loop just won't run
-            for (int d = c; d < local_embed_size_plus_one; d++) { 
-              input_sum += (unnormProbs_z_given_w[d]/normConst_z_given_w) * positive_context_fixed_sum_per_dim[d];
-              context_sum += (unnormProbs_z_given_w[d]/normConst_z_given_w) * positive_context_gradient[a * local_embed_size_plus_one + d]; 
+            for (int z = j; z < local_embed_size_plus_one; z++) { 
+              input_sum += (unnormProbs_z_given_w[z]/normConst_z_given_w) * positive_context_fixed_sum_per_dim[z];
+	      for (int pos_idx = 0; pos_idx < pos_context_counter; pos_idx++){
+		if (pos_idx != a){
+		  // if not the current positive example, then update with just the [d log p(z | w) / d c][log p(c | w, z hat)] term (other term is zero)
+		  context_embed[pos_context_store[pos_idx]*embed_max_size + j] -= (alpha * 1.0/num_z_samples * 1.0/pos_context_counter) * (-log(prob_c + epsilon))((unnormProbs_z_given_w[curr_z]/normConst_z_given_w)*positive_context_gradient[pos_idx * embed_max_size + j]-(unnormProbs_z_given_w[z]/normConst_z_given_w) * positive_context_gradient[pos_idx * embed_max_size + j]); 
+		}
+		else{
+		  context_sum -= (unnormProbs_z_given_w[z]/normConst_z_given_w) * positive_context_gradient[pos_idx * local_embed_size_plus_one + j];
+		}
+	      } 
 	    }
 	    input_gradient[c] += ((prob_c - 1.0) * input_deriv);
             input_gradient_accumulator[c] += per_dim_alpha * ((1.0/(negative+1.0)) * input_gradient[c] + (log(prob_c + epsilon)) * input_sum); 
