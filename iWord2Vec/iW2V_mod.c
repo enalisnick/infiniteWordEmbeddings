@@ -396,6 +396,17 @@ int sample_from_mult_list(float float_probs[], int k, int vals[], int N, const g
   return max_idx;
 }
 
+void check_value(float val, char *name, int idx) {
+  if (isnan(val) || isinf(val)) { 
+    printf("-------------------------\n");
+    if (isnan(val)) printf("NAN!\n");
+    else if (isinf(val)) printf("INF!\n");
+ 
+    printf("idx: %d, name=%s, val=%f\n", idx, name, val);
+    printf("-------------------------\n");
+  }
+}
+
 void debug_prob(float probs[], int len) {
   int i;
   printf("*****************\n");
@@ -658,7 +669,7 @@ void *TrainModelThread(void *arg) {
 	      }
 	    }
 	  }
-
+          
           // sum over z
 	  for (int v=0; v < pos_context_counter; v++){
 	    long long pos_context_word_position = pos_context_store[v] * embed_max_size;
@@ -671,7 +682,7 @@ void *TrainModelThread(void *arg) {
 		sum_over_z_for_context_grad += temp * context_deriv;
 		sum_over_z_for_input_grad += temp * input_deriv;
 	      }
-	      //printf("p(c|w,z): %f, sum: %f\n", (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]/normConst_c_given_w_z_Zsize[curr_z-1]), sum_over_z_for_input_grad); 
+              check_value((unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]/normConst_c_given_w_z_Zsize[curr_z-1]), "p(c|w,z)", j);
               input_dimension_gradient[j] += (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]/normConst_c_given_w_z_Zsize[curr_z-1]) * input_deriv - sum_over_z_for_input_grad; 
 	      if (v != a) {
 		// If not the true context word, update context vector
@@ -685,13 +696,12 @@ void *TrainModelThread(void *arg) {
 	  }
 
 	  // apply gradient update to input and positive, true context
-	  //printf("z_sample: %d\n", m);
           for (int j = 0; j < curr_z; j++) {  
 	    float input_deriv = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	    float context_deriv = input_embed[input_word_position + j] -  sparsity_weight*2*context_embed[context_word_position + j];
-	    //printf("j=%d, input_dimension_gradient: %f\n", j, input_dimension_gradient[j]);
-            //printf("j=%d, pos_context_dimesion_gradient: %f\n", j, pos_k_context_dimension_gradient[j]);
-            input_gradient_accumulator[j] += -1*(1.0/(1.0+negative))*(pos_prob_c * input_deriv - input_prediction_gradient[j]) - log(pos_prob_c + epsilon)*(1.0/pos_context_counter)*input_dimension_gradient[j];
+            check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
+            check_value(pos_k_context_dimension_gradient[j], "pos_context_dimesion_gradient", j);
+            input_gradient_accumulator[j] += -1*(1.0/(1.0+negative))*((1.0 - pos_prob_c) * input_deriv - input_prediction_gradient[j]) - log(pos_prob_c + epsilon)*(1.0/pos_context_counter)*input_dimension_gradient[j];
 	    context_gradient_accumulator[j] += -((1-pos_prob_c) * context_deriv) - log(pos_prob_c + epsilon) * pos_k_context_dimension_gradient[j];
 	  
             // reset input gradients
@@ -702,13 +712,12 @@ void *TrainModelThread(void *arg) {
 
 	// apply gradient update to input and positive, true context  
         for (int j = 0; j < local_embed_size_plus_one; j++) { //TODO: should it be local_embed_size_plus_one?
-	  //printf("input gradient: %f\n", input_gradient_accumulator[j]);
-          //printf("context gradient: %f\n", context_gradient_accumulator[j]);
+          check_value(input_gradient_accumulator[j], "input gradient", j);
+          check_value(context_gradient_accumulator[j], "context gradient", j);
           input_embed[input_word_position + j] -= (alpha * 1.0/num_z_samples) * input_gradient_accumulator[j];
 	  context_embed[context_word_position + j] -= (alpha * 1.0/num_z_samples) * context_gradient_accumulator[j];
 	  for (d = 0; d < negative; d++){
             if (neg_context_store[d] > 0){
-              //printf("neg context gradient: %f\n", neg_context_prediction_gradient[d * embed_max_size + j]);
               negative_word_position = neg_context_store[d] * embed_max_size;
 	      context_embed[negative_word_position + j] -= (alpha * 1.0/num_z_samples) * neg_context_prediction_gradient[d*embed_max_size + j];
 	    }
