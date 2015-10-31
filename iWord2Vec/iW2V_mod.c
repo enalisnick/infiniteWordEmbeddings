@@ -672,7 +672,7 @@ void *TrainModelThread(void *arg) {
 		sum_over_z_for_input_grad += temp * input_deriv;
 	      }
 	      //printf("p(c|w,z): %f, sum: %f\n", (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]/normConst_c_given_w_z_Zsize[curr_z-1]), sum_over_z_for_input_grad); 
-              input_dimension_gradient[j] += (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]/normConst_c_given_w_z_Zsize[curr_z-1]) * context_deriv - sum_over_z_for_input_grad; 
+              input_dimension_gradient[j] += (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]/normConst_c_given_w_z_Zsize[curr_z-1]) * input_deriv - sum_over_z_for_input_grad; 
 	      if (v != a) {
 		// If not the true context word, update context vector
 		// can do this since its not used again
@@ -695,8 +695,8 @@ void *TrainModelThread(void *arg) {
 	    context_gradient_accumulator[j] += -((1-pos_prob_c) * context_deriv) - log(pos_prob_c + epsilon) * pos_k_context_dimension_gradient[j];
 	  
             // reset input gradients
-            input_dimension_gradient[j] = 0.0;
             input_prediction_gradient[j] = 0.0;
+            input_dimension_gradient[j] = 0.0;
           }
 	}
 
