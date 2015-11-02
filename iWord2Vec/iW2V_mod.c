@@ -698,8 +698,11 @@ void *TrainModelThread(void *arg) {
 
 	  // apply gradient update to input and positive, true context
           for (int j = 0; j < local_embed_size_plus_one; j++) {  
-	    float input_deriv = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
-	    float context_deriv = input_embed[input_word_position + j] -  sparsity_weight*2*context_embed[context_word_position + j];
+	    float input_deriv = 0.0, context_deriv = 0.0;
+            if (j < curr_z) {
+              input_deriv = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
+	      context_deriv = input_embed[input_word_position + j] -  sparsity_weight*2*context_embed[context_word_position + j];
+            }
             check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
             check_value(pos_k_context_dimension_gradient[j], "pos_context_dimesion_gradient", j);
             input_gradient_accumulator[j] += -1*(1.0/(1.0+negative))*((1.0 - pos_prob_c) * input_deriv - input_prediction_gradient[j]) - log(pos_prob_c + epsilon)*(1.0/pos_context_counter)*input_dimension_gradient[j];
