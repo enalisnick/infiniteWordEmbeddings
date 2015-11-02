@@ -673,7 +673,7 @@ void *TrainModelThread(void *arg) {
           // sum over z
 	  for (int v=0; v < pos_context_counter; v++){
 	    long long pos_context_word_position = pos_context_store[v] * embed_max_size;
-            for (int j = 0; j < curr_z; j++) {
+            for (int j = 0; j < local_embed_size_plus_one - 1; j++) {
 	      float input_deriv = context_embed[pos_context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	      float context_deriv = input_embed[input_word_position + j] -  sparsity_weight*2*context_embed[pos_context_word_position + j];
 	      float sum_over_z_for_context_grad = 0.0, sum_over_z_for_input_grad = 0.0;
