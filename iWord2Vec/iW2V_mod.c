@@ -604,6 +604,7 @@ void *TrainModelThread(void *arg) {
           input_dimension_gradient[c] = 0.0;
           context_gradient_accumulator[c] = 0.0;
           input_gradient_accumulator[c] = 0.0; 
+          pos_k_context_dimension_gradient[c] = 0.0;
           for (d = 0; d < negative; d++) {
             //neg_context_gradient_accumulator[d * embed_max_size + c] = 0.0; // TODO: don't need this var? 
             neg_context_prediction_gradient[d * embed_max_size + c] = 0.0;
@@ -696,7 +697,7 @@ void *TrainModelThread(void *arg) {
 	  }
 
 	  // apply gradient update to input and positive, true context
-          for (int j = 0; j < curr_z; j++) {  
+          for (int j = 0; j < local_embed_size_plus_one; j++) {  
 	    float input_deriv = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	    float context_deriv = input_embed[input_word_position + j] -  sparsity_weight*2*context_embed[context_word_position + j];
             check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
@@ -709,8 +710,8 @@ void *TrainModelThread(void *arg) {
             input_dimension_gradient[j] = 0.0;
           }
 	}
-
-	// apply gradient update to input and positive, true context  
+ 
+        // apply gradient update to input and positive, true context  
         for (int j = 0; j < local_embed_size_plus_one; j++) { //TODO: should it be local_embed_size_plus_one?
           check_value(input_gradient_accumulator[j], "input gradient", j);
           check_value(context_gradient_accumulator[j], "context gradient", j);
