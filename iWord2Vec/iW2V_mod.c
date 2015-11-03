@@ -592,7 +592,7 @@ void *TrainModelThread(void *arg) {
           unnormProbs_z_given_w, pos_context_counter, 
           local_embed_size_plus_one);   
 	
-	// calculate p(c_v|w_i,z) for all z's 
+	// calculate p(c_v|w_i,z) for all z's (not doing l+1) 
 	for (int z = 1; z < local_embed_size_plus_one; z++) {
 	  normConst_c_given_w_z_Zsize[z-1] = 0;
 	  for (int v = 0; v < pos_context_counter; v++) {
@@ -603,18 +603,7 @@ void *TrainModelThread(void *arg) {
 	    normConst_c_given_w_z_Zsize[z-1] 
              += unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z-1];
 	  }
-	}
-	// need to do the (l+1)th term
-	normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1] = 0;
-	for (int v = 0; v < pos_context_counter; v++) {
-	  context_word_position = pos_context_store[v] * embed_max_size;
-	  unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-1] 
-            = (dim_penalty/(dim_penalty-1))
-              * unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-2];
-	  normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1] 
-            += unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size 
-               + local_embed_size_plus_one-1];
-	}
+	}	
    
         // only need to initialize dimensions less than current_size + 1 since that's all it can grow	
         for (c = 0; c < local_embed_size_plus_one; c++) {
@@ -702,16 +691,26 @@ void *TrainModelThread(void *arg) {
           // sum over z
 	  for (int v=0; v < pos_context_counter; v++){
 	    long long pos_context_word_position = pos_context_store[v] * embed_max_size;
-            for (int j = 0; j < local_embed_size_plus_one - 1; j++) {
+            for (int j = 0; j < curr_z; j++) {
 	      float input_deriv = context_embed[pos_context_word_position + j] 
                 - sparsity_weight*2*input_embed[input_word_position + j];
 	      float context_deriv = input_embed[input_word_position + j] 
                 - sparsity_weight*2*context_embed[pos_context_word_position + j];
 	      float sum_over_z_for_context_grad = 0.0, sum_over_z_for_input_grad = 0.0;
-	      for (int z = j; z < local_embed_size_plus_one; z++) { 
-		float temp = (unnormProbs_z_given_w[z]/normConst_z_given_w)
-                  * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z]
-                      /normConst_c_given_w_z_Zsize[z]);
+	      for (int z = j; z < local_embed_size_plus_one; z++) {
+                float p_z_given_w = 0.0, temp = 0.0; 
+                if (z == local_embed_size_plus_one-1) { // the l+1 term uses lth term
+                  p_z_given_w = (unnormProbs_z_given_w[z-1]/normConst_z_given_w);
+                  temp = p_z_given_w * (dim_penalty/(dim_penalty-1)) 
+                    * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z-1]
+                        /normConst_c_given_w_z_Zsize[z-1]);
+                }
+                else {
+                  p_z_given_w = (unnormProbs_z_given_w[z]/normConst_z_given_w);
+                  temp = p_z_given_w                                        
+                    * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z]      
+                        /normConst_c_given_w_z_Zsize[z]);
+                }
 		sum_over_z_for_context_grad += temp * context_deriv;
 		sum_over_z_for_input_grad += temp * input_deriv;
 	      }
@@ -723,12 +722,14 @@ void *TrainModelThread(void *arg) {
                   * input_deriv - sum_over_z_for_input_grad; 
 	      if (v != a) {
 		// If not the true context word, update context vector
-		// can do this since its not used again
-		context_embed[pos_context_word_position + j] -= 
-                 (alpha * 1.0/num_z_samples)*(-log(pos_prob_c + epsilon))
+		// can do this since its not used again 
+                float val = (alpha * 1.0/num_z_samples)*(-log(pos_prob_c + epsilon))
                  *(unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
                     /normConst_c_given_w_z_Zsize[curr_z-1] * context_deriv 
                     - sum_over_z_for_context_grad);
+                context_embed[pos_context_word_position + j] -= val;
+                check_value(val, "context grad", j);
+                check_value(context_embed[pos_context_word_position + j], "context embed value", j);
               }
 	      else{
 		pos_k_context_dimension_gradient[j] = 
@@ -765,8 +766,8 @@ void *TrainModelThread(void *arg) {
  
         // apply gradient update to input and positive, true context  
         for (int j = 0; j < local_embed_size_plus_one; j++) { //TODO: should it be local_embed_size_plus_one?
-          check_value(input_gradient_accumulator[j], "input gradient", j);
-          check_value(context_gradient_accumulator[j], "context gradient", j);
+          check_value(input_gradient_accumulator[j], "input gradient acc", j);
+          check_value(context_gradient_accumulator[j], "context gradient acc", j);
           input_embed[input_word_position + j] 
            -= (alpha * 1.0/num_z_samples) * input_gradient_accumulator[j];
 	  context_embed[context_word_position + j] 
