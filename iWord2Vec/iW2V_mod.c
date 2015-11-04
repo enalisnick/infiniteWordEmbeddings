@@ -289,8 +289,8 @@ float compute_energy(long long w_idx, long long c_idx, int z){
   float energy = 0.0;
   for (a = 0; a<z; a++) energy += 
     -input_embed[w_idx + a]*context_embed[c_idx + a] + log(dim_penalty) 
-    + sparsity_weight*pow(input_embed[w_idx + a],2) 
-    + sparsity_weight*pow(context_embed[c_idx + a],2);
+    + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx+a] 
+    + sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
   return energy;
 }
 
@@ -304,8 +304,8 @@ float compute_energy(long long w_idx, long long c_idx, int z){
 void compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) { 
   for (int a = 0; a < curr_z; a++) {
     float val = -input_embed[w_idx + a]*context_embed[c_idx + a] 
-                +log(dim_penalty) + sparsity_weight*pow(input_embed[w_idx + a],2) 
-                +sparsity_weight*pow(context_embed[c_idx + a],2);
+                +log(dim_penalty) + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
+                +sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
@@ -359,6 +359,37 @@ float compute_z_given_w(long long word, long long *context,
   }
   free(z_dist_list);
   return norm;
+}
+
+void compute_c_given_w_z(float *unnormProbs_c_given_w_z_ZxCsize, float *normConst_c_given_w_z_Zsize, 
+  int local_embed_size_plus_one, long long w_idx, 
+  long long *context, int pos_context_counter) {
+
+  for (int z = 0; z < local_embed_size_plus_one; z++) { 
+    normConst_c_given_w_z_Zsize[z] = 0;
+  }  
+
+  // calculate p(c_v|w_i,z) for all z's (not doing l+1)   
+  for (int v = 0; v < pos_context_counter; v++) {
+    long long c_idx = context[v] * embed_max_size;   
+    long energy = 0.0;
+    for (int z = 0; z < local_embed_size_plus_one - 1; z++) {
+      energy += -input_embed[w_idx + z]*context_embed[c_idx + z] + log(dim_penalty) 
+                + sparsity_weight*input_embed[w_idx + z]*input_embed[w_idx + z] 
+                + sparsity_weight*context_embed[c_idx + z]*context_embed[c_idx + z];
+      unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z] = exp(-energy);
+      normConst_c_given_w_z_Zsize[z] += unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z];
+    } 
+  }
+
+  // need to do the (l+1)th term (keep norm same as lth so that we actually are multiplying)
+  for (int v = 0; v < pos_context_counter; v++) {
+    unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-1] 
+      = (dim_penalty/(dim_penalty-1))
+	* unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-2]; 
+  }
+  normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1] 
+     = normConst_c_given_w_z_Zsize[local_embed_size_plus_one-2];
 }
 
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
@@ -592,30 +623,10 @@ void *TrainModelThread(void *arg) {
           unnormProbs_z_given_w, pos_context_counter, 
           local_embed_size_plus_one);   
 	
-	// calculate p(c_v|w_i,z) for all z's (not doing l+1) 
-	for (int z = 1; z < local_embed_size_plus_one; z++) {
-	  normConst_c_given_w_z_Zsize[z-1] = 0;
-	  for (int v = 0; v < pos_context_counter; v++) {
-	    context_word_position = pos_context_store[v] * embed_max_size;
-	    unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z-1] 
-              = exp(-compute_energy(input_word_position, context_word_position, 
-                    z)); 
-	    normConst_c_given_w_z_Zsize[z-1] 
-             += unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z-1];
-	  }
-	}	
-  
-        // need to do the (l+1)th term (keep norm same as lth so that we actually are multiplying)
-	normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1] = 0;
-	for (int v = 0; v < pos_context_counter; v++) {
-	  context_word_position = pos_context_store[v] * embed_max_size;
-	  unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-1] 
-            = (dim_penalty/(dim_penalty-1))
-              * unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-2]; 
-	}
-        normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1] 
-           = normConst_c_given_w_z_Zsize[local_embed_size_plus_one-2];
- 
+        // compute p(c|w,z)
+	compute_c_given_w_z(unnormProbs_c_given_w_z_ZxCsize, normConst_c_given_w_z_Zsize,
+          local_embed_size_plus_one, input_word_position, pos_context_store, pos_context_counter);
+
         // only need to initialize dimensions less than current_size + 1 since that's all it can grow	
         for (c = 0; c < local_embed_size_plus_one; c++) {
           input_prediction_gradient[c] = 0.0;
