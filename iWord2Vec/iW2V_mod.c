@@ -604,7 +604,18 @@ void *TrainModelThread(void *arg) {
              += unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z-1];
 	  }
 	}	
-   
+  
+        // need to do the (l+1)th term (keep norm same as lth so that we actually are multiplying)
+	normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1] = 0;
+	for (int v = 0; v < pos_context_counter; v++) {
+	  context_word_position = pos_context_store[v] * embed_max_size;
+	  unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-1] 
+            = (dim_penalty/(dim_penalty-1))
+              * unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one-2]; 
+	}
+        normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1] 
+           = normConst_c_given_w_z_Zsize[local_embed_size_plus_one-2];
+ 
         // only need to initialize dimensions less than current_size + 1 since that's all it can grow	
         for (c = 0; c < local_embed_size_plus_one; c++) {
           input_prediction_gradient[c] = 0.0;
@@ -691,51 +702,48 @@ void *TrainModelThread(void *arg) {
           // sum over z
 	  for (int v=0; v < pos_context_counter; v++){
 	    long long pos_context_word_position = pos_context_store[v] * embed_max_size;
-            for (int j = 0; j < curr_z; j++) {
+            for (int j = 0; j < local_embed_size_plus_one - 1; j++) {
 	      float input_deriv = context_embed[pos_context_word_position + j] 
                 - sparsity_weight*2*input_embed[input_word_position + j];
 	      float context_deriv = input_embed[input_word_position + j] 
                 - sparsity_weight*2*context_embed[pos_context_word_position + j];
 	      float sum_over_z_for_context_grad = 0.0, sum_over_z_for_input_grad = 0.0;
-	      for (int z = j; z < local_embed_size_plus_one; z++) {
-                float p_z_given_w = 0.0, temp = 0.0; 
-                if (z == local_embed_size_plus_one-1) { // the l+1 term uses lth term
-                  p_z_given_w = (unnormProbs_z_given_w[z-1]/normConst_z_given_w);
-                  temp = p_z_given_w * (dim_penalty/(dim_penalty-1)) 
-                    * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z-1]
-                        /normConst_c_given_w_z_Zsize[z-1]);
-                }
-                else {
-                  p_z_given_w = (unnormProbs_z_given_w[z]/normConst_z_given_w);
-                  temp = p_z_given_w                                        
+	      // add j,...,l dimensions
+              for (int z = j; z < local_embed_size_plus_one - 1; z++) { 
+                float p_z_given_w = (unnormProbs_z_given_w[z]/normConst_z_given_w);
+                float temp = p_z_given_w                                        
                     * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z]      
                         /normConst_c_given_w_z_Zsize[z]);
-                }
 		sum_over_z_for_context_grad += temp * context_deriv;
 		sum_over_z_for_input_grad += temp * input_deriv;
 	      }
-              check_value((unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
-                            /normConst_c_given_w_z_Zsize[curr_z-1]), "p(c|w,z)", j);
-              input_dimension_gradient[j] 
-               += (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
-                    /normConst_c_given_w_z_Zsize[curr_z-1]) 
-                  * input_deriv - sum_over_z_for_input_grad; 
+              // add l+1th dimension 
+              float p_z_given_w = (unnormProbs_z_given_w[local_embed_size_plus_one - 2]/normConst_z_given_w);
+              float temp = p_z_given_w                                        
+                    * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one - 1]    
+                        /normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1]);  
+              sum_over_z_for_context_grad += temp * context_deriv;            
+              sum_over_z_for_input_grad += temp * input_deriv;
+              
+              
+              float p_c_given_w_z = 0.0;
+              if (j <= curr_z-1) {  // p(c_v|w_i,z_m) term is only defined for dimenions z_m and less
+                p_c_given_w_z = unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
+                                 /normConst_c_given_w_z_Zsize[curr_z-1];
+              }
+              check_value(p_c_given_w_z, "p(c|w,z)", j);
+              input_dimension_gradient[j] += p_c_given_w_z * input_deriv - sum_over_z_for_input_grad; 
 	      if (v != a) {
 		// If not the true context word, update context vector
 		// can do this since its not used again 
                 float val = (alpha * 1.0/num_z_samples)*(-log(pos_prob_c + epsilon))
-                 *(unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
-                    /normConst_c_given_w_z_Zsize[curr_z-1] * context_deriv 
-                    - sum_over_z_for_context_grad);
+                 * (p_c_given_w_z * context_deriv - sum_over_z_for_context_grad);
                 context_embed[pos_context_word_position + j] -= val;
                 check_value(val, "context grad", j);
                 check_value(context_embed[pos_context_word_position + j], "context embed value", j);
               }
 	      else{
-		pos_k_context_dimension_gradient[j] = 
-                  (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
-                    /normConst_c_given_w_z_Zsize[curr_z-1] * context_deriv 
-                    - sum_over_z_for_context_grad);  
+		pos_k_context_dimension_gradient[j] = p_c_given_w_z * context_deriv - sum_over_z_for_context_grad;  
 	      }
 	    }
 	  }
