@@ -700,7 +700,7 @@ void *TrainModelThread(void *arg) {
 					     context_word_position, curr_z));
 	}
 	else {
-	  pos_prob_c = unnormProbs_c_given_w_z_ZxCsize[a*embed_max_size + curr_z];
+	  pos_prob_c = unnormProbs_c_given_w_z_ZxCsize[a*embed_max_size + curr_z-1];
 	} 
 
 	Z_c += pos_prob_c;
