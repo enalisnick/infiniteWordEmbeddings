@@ -525,7 +525,9 @@ void *TrainModelThread(void *arg) {
   // terms needed for [d log p(z hat | w) / d w_{i,j} ]  
   float *unnormProbs_z_given_w = (float *) calloc(embed_max_size, sizeof(float)); // p(z|w) unnormalized
   float *unnormProbs_c_given_w_z_ZxCsize = (float *) calloc(2*window*embed_max_size, sizeof(float)); // contains all |c_v|x|z| unnormalized probabilities
-  float *normConst_c_given_w_z_Zsize = (float *) calloc((embed_max_size), sizeof(float)); // normalization constant for p(c | w, z) over all z    
+  float *normConst_c_given_w_z_Zsize = (float *) calloc((embed_max_size), sizeof(float)); // normalization constant for p(c | w, z) over all z 
+  float *sum_over_z_for_context_grad = (float *) calloc((2*window*embed_max_size), sizeof(float));
+  float *sum_over_z_for_input_grad  = (float *) calloc((embed_max_size), sizeof(float));
   // terms needed for [d log p(c_k | w_i, z hat) / d w_{i,j} ]
   float *input_gradient_accumulator = (float *) calloc(embed_max_size, sizeof(float)); // stores input (w_i) gradient across z samples
   float *input_prediction_gradient = (float *) calloc(embed_max_size, sizeof(float)); // stores the d log p(c_k | w, z_hat) / d w gradient 
@@ -632,6 +634,7 @@ void *TrainModelThread(void *arg) {
       for (c = 0; c < local_embed_size_plus_one; c++) {
 	input_prediction_gradient[c] = 0.0;
 	input_dimension_gradient[c] = 0.0;
+	sum_over_z_for_input_grad[c] = 0.0;
 	context_gradient_accumulator[c] = 0.0;
 	input_gradient_accumulator[c] = 0.0; 
 	context_dimension_gradient[c] = 0.0;
@@ -641,6 +644,7 @@ void *TrainModelThread(void *arg) {
 	for (d = 0; d < pos_context_counter; d++) {
           context_dimension_gradient[d * embed_max_size + c] = 0.0;
 	  context_gradient_accumulator[d * embed_max_size + c] = 0.0;
+	  sum_over_z_for_context_grad[d * embed_max_size + c] = 0.0;
         }
       }
 
@@ -677,11 +681,33 @@ void *TrainModelThread(void *arg) {
 	d--;
       }
 
-      // IMPORTANT note on updates: in the following loop over the samples, we can only update the
-      // positive context vectors used to calculate p(z|w) but not the 'true' context vector c_k, 
-      // the negative samples, or the input vector since they are used in each iteration (and hence 
-      // would outdate the other variables)
+      // NESTED SUM OVER DIMENSIONS
+      for (int v=0; v < pos_context_counter; v++){
+	context_word_position = pos_context_store[v] * embed_max_size;
+	for (int j = 0; j < local_embed_size_plus_one - 1; j++) {
+	  // precompute derivatives                                                                                                                                                                                         
+	  float input_deriv = context_embed[context_word_position + j]
+	    - sparsity_weight*2*input_embed[input_word_position + j];
+	  float context_deriv = input_embed[input_word_position + j]
+	      - sparsity_weight*2*context_embed[context_word_position + j];
+	  // sum over j,...,l dimensions                                                                                                                                                                            
+	  for (int z = j; z < local_embed_size_plus_one - 1; z++) {
+	    float temp = (unnormProbs_z_given_w[z]/normConst_z_given_w)
+		* (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z]
+		   /normConst_c_given_w_z_Zsize[z]);
+	    sum_over_z_for_context_grad[v*embed_max_size + j] += temp * context_deriv;
+	    sum_over_z_for_input_grad[j] += temp * input_deriv;
+	  }
+	  // add l+1th dimension                                                                                                                                                                            
+	  float temp = (unnormProbs_z_given_w[local_embed_size_plus_one - 2]/normConst_z_given_w)
+	      * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one - 1]
+		 /normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1]);
+	  sum_over_z_for_context_grad[v*embed_max_size + j] += temp * context_deriv;
+	  sum_over_z_for_input_grad[j] += temp * input_deriv;
+	}
+      }
 
+      // SUM OVER THE SAMPLED Z's
       for (int m = 0; m < num_z_samples; m++) { 
 
 	int curr_z = z_samples[m];
@@ -730,45 +756,29 @@ void *TrainModelThread(void *arg) {
 	}
 
 	// NESTED SUM OVER Z TO COMPUTE DIMENSION (ie log p(z | w) / d w) GRADIENT
-	for (int v=0; v < pos_context_counter; v++){
-	  context_word_position = pos_context_store[v] * embed_max_size;
-	  for (int j = 0; j < local_embed_size_plus_one - 1; j++) {
-	    // precompute derivatives
+	for (int j=0; j < local_embed_size_plus_one - 1; j++){
+	  float temp_input_sum = 0.0;
+	  for (int v = 0; v < pos_context_counter; v++) {
+	    context_word_position = pos_context_store[v] * embed_max_size;
 	    float input_deriv = context_embed[context_word_position + j] 
-                - sparsity_weight*2*input_embed[input_word_position + j];
+	      - sparsity_weight*2*input_embed[input_word_position + j];
 	    float context_deriv = input_embed[input_word_position + j] 
-                - sparsity_weight*2*context_embed[context_word_position + j];
-	    float sum_over_z_for_context_grad = 0.0, sum_over_z_for_input_grad = 0.0;
-	    // sum over j,...,l dimensions
-	    for (int z = j; z < local_embed_size_plus_one - 1; z++) { 
-	      float temp = (unnormProbs_z_given_w[z]/normConst_z_given_w)            
-                    * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z]      
-                        /normConst_c_given_w_z_Zsize[z]);
-	      sum_over_z_for_context_grad += temp * context_deriv;
-	      sum_over_z_for_input_grad += temp * input_deriv;
-	    }
-	    // add l+1th dimension 
-	    float temp = (unnormProbs_z_given_w[local_embed_size_plus_one - 2]/normConst_z_given_w)                                        
-                    * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one - 1]    
-                        /normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1]);
-	    sum_over_z_for_context_grad += temp * context_deriv;       
-	    sum_over_z_for_input_grad += temp * input_deriv;
-
-	    // Now add the sum to the gradient accumulators and update not predicted context vecs
+		  - sparsity_weight*2*context_embed[context_word_position + j];
 	    // p(c_v|w_i,z_m) term is only defined for dimenions z_m and less 
-	    float p_c_given_w_z = 0;
+	    float p_c_given_w_z = 0.0;
 	    if (j < curr_z) {  
 	      p_c_given_w_z = unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
-                                 /normConst_c_given_w_z_Zsize[curr_z-1];
+		/normConst_c_given_w_z_Zsize[curr_z-1];
+	      temp_input_sum += p_c_given_w_z * input_deriv;
 	    }
 	    check_value(p_c_given_w_z, "p(c|w,z)", j);
-	    
-	    // input grad
-	    input_dimension_gradient[j] += p_c_given_w_z * input_deriv - sum_over_z_for_input_grad; 
-
+	    	    
 	    // context grad
-	    context_dimension_gradient[v*embed_max_size + j] += p_c_given_w_z * context_deriv - sum_over_z_for_context_grad;
+	    context_dimension_gradient[v*embed_max_size + j] += p_c_given_w_z * context_deriv - sum_over_z_for_context_grad[v*embed_max_size + j];
 	  }
+
+	  // input grad                                                                                                                                                                                                        
+	  input_dimension_gradient[j] += temp_input_sum - sum_over_z_for_input_grad[j];
 	}
 
 	// ADD TEMP GRADIENT STORES TO INPUT AND CONTEXT ACCUMULATORS
@@ -862,6 +872,8 @@ void *TrainModelThread(void *arg) {
   free(input_gradient_accumulator);
   free(context_gradient_accumulator);
   free(neg_context_prediction_gradient);
+  free(sum_over_z_for_input_grad);
+  free(sum_over_z_for_context_grad);
   free(neg_probs);
 
   pthread_exit(NULL);
