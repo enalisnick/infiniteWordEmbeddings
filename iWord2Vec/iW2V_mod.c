@@ -372,7 +372,7 @@ void compute_c_given_w_z(float *unnormProbs_c_given_w_z_ZxCsize, float *normCons
   // calculate p(c_v|w_i,z) for all z's (not doing l+1)   
   for (int v = 0; v < pos_context_counter; v++) {
     long long c_idx = context[v] * embed_max_size;   
-    long energy = 0.0;
+    float energy = 0.0;
     for (int z = 0; z < local_embed_size_plus_one - 1; z++) {
       energy += -input_embed[w_idx + z]*context_embed[c_idx + z] + log(dim_penalty) 
                 + sparsity_weight*input_embed[w_idx + z]*input_embed[w_idx + z] 
@@ -790,9 +790,8 @@ void *TrainModelThread(void *arg) {
 	    context_deriv = input_embed[input_word_position + j] 
                - sparsity_weight*2*context_embed[pos_context_store[a] * embed_max_size + j];
 	  }
-	  check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
-	  check_value(context_dimension_gradient[j], "pos_context_dimesion_gradient", j);
 
+	  check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
 	  input_gradient_accumulator[j] += -1*(1.0/(1.0+negative))
               *((1.0 - pos_prob_c) * input_deriv - input_prediction_gradient[j]) 
               - (log(pos_prob_c + epsilon)*(1.0/pos_context_counter)
@@ -800,11 +799,13 @@ void *TrainModelThread(void *arg) {
 
 	  for (int v=0; v<pos_context_counter; v++){
 	    if (v==a){
-	      // if c_v is the word we predicted, add prediction subgradient
+	      check_value(context_dimension_gradient[v*embed_max_size + j], "pos context_dimesion_gradient", j);
+              // if c_v is the word we predicted, add prediction subgradient
 	      context_gradient_accumulator[v*embed_max_size + j] += -((1-pos_prob_c) * context_deriv) 
 		- log(pos_prob_c + epsilon) * context_dimension_gradient[v*embed_max_size + j];
 	    }
 	    else{
+              check_value(context_dimension_gradient[v*embed_max_size + j], "neg context_dimesion_gradient", j);
 	      context_gradient_accumulator[v*embed_max_size + j] += - log(pos_prob_c + epsilon) * context_dimension_gradient[v*embed_max_size + j];
 	    }
 	    
@@ -823,7 +824,6 @@ void *TrainModelThread(void *arg) {
       // apply gradient update to input, neg context, and positive true context  
       for (int j = 0; j < local_embed_size_plus_one; j++) { 
 	check_value(input_gradient_accumulator[j], "input gradient acc", j);
-	check_value(context_gradient_accumulator[j], "context gradient acc", j);
 
 	// update w_i
 	input_embed[input_word_position + j] 
@@ -831,7 +831,8 @@ void *TrainModelThread(void *arg) {
 
 	// update positive contexts
 	for (int v=0; v<pos_context_counter; v++){
-	  context_word_position = pos_context_store[v] * embed_max_size;
+	  check_value(context_gradient_accumulator[v*embed_max_size + j], "pos context gradient acc", j);
+          context_word_position = pos_context_store[v] * embed_max_size;
 	  context_embed[context_word_position + j] 
 	    -= (alpha * 1.0/num_z_samples) * context_gradient_accumulator[v*embed_max_size + j];
 	}
@@ -841,6 +842,7 @@ void *TrainModelThread(void *arg) {
 	  if (neg_context_store[d] > 0){
 	    negative_word_position = neg_context_store[d] * embed_max_size;
 
+	    check_value(neg_context_prediction_gradient[d*embed_max_size + j], "neg context gradient acc", j);
 	    context_embed[negative_word_position + j] 
                -= (alpha * 1.0/num_z_samples) 
                   * neg_context_prediction_gradient[d*embed_max_size + j];
