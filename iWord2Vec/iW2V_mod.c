@@ -30,6 +30,7 @@ char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
 int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
 real dim_penalty = 1.1;
+float log_dim_penalty; //we'll compute this in the training function
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
 long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 0, file_size = 0;
@@ -288,7 +289,7 @@ float compute_energy(long long w_idx, long long c_idx, int z){
   long long a;
   float energy = 0.0;
   for (a = 0; a<z; a++) energy += 
-    -input_embed[w_idx + a]*context_embed[c_idx + a] + log(dim_penalty) 
+    -input_embed[w_idx + a]*context_embed[c_idx + a] + log_dim_penalty 
     + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx+a] 
     + sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
   return energy;
@@ -304,7 +305,7 @@ float compute_energy(long long w_idx, long long c_idx, int z){
 void compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) { 
   for (int a = 0; a < curr_z; a++) {
     float val = -input_embed[w_idx + a]*context_embed[c_idx + a] 
-                +log(dim_penalty) + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
+                +log_dim_penalty + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
                 +sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
@@ -374,7 +375,7 @@ void compute_c_given_w_z(float *unnormProbs_c_given_w_z_ZxCsize, float *normCons
     long long c_idx = context[v] * embed_max_size;   
     float energy = 0.0;
     for (int z = 0; z < local_embed_size_plus_one - 1; z++) {
-      energy += -input_embed[w_idx + z]*context_embed[c_idx + z] + log(dim_penalty) 
+      energy += -input_embed[w_idx + z]*context_embed[c_idx + z] + log_dim_penalty 
                 + sparsity_weight*input_embed[w_idx + z]*input_embed[w_idx + z] 
                 + sparsity_weight*context_embed[c_idx + z]*context_embed[c_idx + z];
       unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z] = exp(-energy);
@@ -903,7 +904,8 @@ void TrainModel() {
   InitNet();
   if (negative > 0) InitUnigramTable();
   start = clock();
- 
+  // compute log of dim penalty
+  log_dim_penalty = log(dim_penalty);
   int actual_iter = iter;
   if (fixed_dim_iter > 0) {
     // fixed-dim training
