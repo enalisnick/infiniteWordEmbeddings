@@ -699,6 +699,10 @@ void *TrainModelThread(void *arg) {
           sum += temp;
           sum_over_z_list[j] = sum;
         }
+
+	float l_plus_one_term = (unnormProbs_z_given_w[local_embed_size_plus_one - 2]/normConst_z_given_w)
+	  * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one - 1]
+	     /normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1]);
         
         for (int j = 0; j < local_embed_size_plus_one - 1; j++) {
           float input_deriv = context_embed[context_word_position + j]          
@@ -706,14 +710,9 @@ void *TrainModelThread(void *arg) {
           float context_deriv = input_embed[input_word_position + j]            
             - sparsity_weight*2*context_embed[context_word_position + j];
 
-          sum_over_z_for_context_grad[v*embed_max_size + j] = sum_over_z_list[j] * context_deriv;
-          sum_over_z_for_input_grad[j] += sum_over_z_list[j] * input_deriv; 
-        
-          float temp = (unnormProbs_z_given_w[local_embed_size_plus_one - 2]/normConst_z_given_w)
-              * (unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + local_embed_size_plus_one - 1]
-                 /normConst_c_given_w_z_Zsize[local_embed_size_plus_one-1]);    
-          sum_over_z_for_context_grad[v*embed_max_size + j] += temp * context_deriv;
-          sum_over_z_for_input_grad[j] += temp * input_deriv;                   
+          sum_over_z_for_context_grad[v*embed_max_size + j] = (sum_over_z_list[j] + l_plus_one_term) * context_deriv;
+          sum_over_z_for_input_grad[j] += (sum_over_z_list[j] + l_plus_one_term) * input_deriv; 
+                  
         }
          
       }
