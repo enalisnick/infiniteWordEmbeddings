@@ -47,6 +47,10 @@ int *table;
 const int EXP_LEN = 40;
 float *exp_table; 
 
+/*
+  Build table which precompute exp function for certain integer
+  values
+*/
 void build_exp_table() {
   exp_table = calloc(EXP_LEN * 2 + 1, sizeof(float));
   for (int i = -EXP_LEN; i <= EXP_LEN; i++) {
@@ -54,29 +58,24 @@ void build_exp_table() {
   }
 }
 
-float exp_approx(float x) {
-  return (362880+x*(362880+x*(181440+x*(60480+x*(15120+x*(3024+x*(504+x*(72+x*(9+x)))))))))*2.75573192e-6;
-}
-
-float exp_approx2(float x) { 
+/*
+  Exp approximate function from 
+  http://stackoverflow.com/questions/10552280/fast-exp-calculation-possible-to-improve-accuracy-without-losing-too-much-perfo/14143184#14143184
+  Error in input range [-1,1] is 0.36%
+*/
+float exp_approx(float x) { 
   return (24+x*(24+x*(12+x*(4+x))))*0.041666666f;
 }
 
+/*
+  Separate into integer and decimal components and use table and 
+  approximate exp function to compute each part, respectively
+*/
 float exp_fast(float x) {
   int x_int = (int)x;
   float x_dec = x - x_int;
   
-  /*if (x_int >= 2 * EXP_LEN * 2 + 1) {
-    printf("OVER: %d\n", x_int);
-  }*/
-  float val = exp_table[x_int + EXP_LEN] * exp_approx2(x_dec); 
-  /* 
-  if (isnan(val) || isinf(val) || val == 0) {
-    printf("x: %f\n", x);
-    printf("x_int: %d\n", x_int);
-    printf("x_dec: %f\n", x_dec);
-  }*/
-  return val;
+  return exp_table[x_int + EXP_LEN] * exp_approx(x_dec);   
 }
 
 // Build table from which to rand. sample words
