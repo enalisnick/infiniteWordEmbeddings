@@ -671,7 +671,6 @@ void *TrainModelThread(void *arg) {
 	input_prediction_gradient[c] = 0.0;
 	input_dimension_gradient[c] = 0.0;
 	sum_over_z_for_input_grad[c] = 0.0;
-	context_gradient_accumulator[c] = 0.0;
 	input_gradient_accumulator[c] = 0.0; 
 	sum_over_z_list[c] = 0.0;
 
