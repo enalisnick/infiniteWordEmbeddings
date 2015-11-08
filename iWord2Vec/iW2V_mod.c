@@ -32,7 +32,7 @@ int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
 real dim_penalty = 1.1;
 float log_dim_penalty; //we'll compute this in the training function
 int *vocab_hash;
-long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 2000, embed_current_size = 5;
+long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 750, embed_current_size = 5;
 long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 0, file_size = 0;
 real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
@@ -975,7 +975,7 @@ int main(int argc, char **argv) {
     printf("\t-initSize <int>\n");
     printf("\t\tSet the initial dimensionality of the word vectors; default is 5\n");
     printf("\t-maxSize <int>\n");
-    printf("\t\tSet the maximum dimensionality of the word vectors; default is 2000\n");
+    printf("\t\tSet the maximum dimensionality of the word vectors; default is 750\n");
     printf("\t-window <int>\n");
     printf("\t\tSet max skip length between words; default is 5\n");
     printf("\t-sample <float>\n");
@@ -1001,7 +1001,7 @@ int main(int argc, char **argv) {
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
     printf("\nExamples:\n");
-    printf("./iW2V -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 5 -maxSize 2000 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
+    printf("./iW2V -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 5 -maxSize 750 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
     return 0;
   }
   output_file[0] = 0;
