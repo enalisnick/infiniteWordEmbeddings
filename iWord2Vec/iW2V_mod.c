@@ -44,6 +44,41 @@ const int table_size = 1e8;
 const double epsilon = 1e-8;
 int *table;
 
+const int EXP_LEN = 40;
+float *exp_table; 
+
+void build_exp_table() {
+  exp_table = calloc(EXP_LEN * 2 + 1, sizeof(float));
+  for (int i = -EXP_LEN; i <= EXP_LEN; i++) {
+    exp_table[i + EXP_LEN] = exp(i);
+  }
+}
+
+float exp_approx(float x) {
+  return (362880+x*(362880+x*(181440+x*(60480+x*(15120+x*(3024+x*(504+x*(72+x*(9+x)))))))))*2.75573192e-6;
+}
+
+float exp_approx2(float x) { 
+  return (24+x*(24+x*(12+x*(4+x))))*0.041666666f;
+}
+
+float exp_fast(float x) {
+  int x_int = (int)x;
+  float x_dec = x - x_int;
+  
+  /*if (x_int >= 2 * EXP_LEN * 2 + 1) {
+    printf("OVER: %d\n", x_int);
+  }*/
+  float val = exp_table[x_int + EXP_LEN] * exp_approx2(x_dec); 
+  /* 
+  if (isnan(val) || isinf(val) || val == 0) {
+    printf("x: %f\n", x);
+    printf("x_int: %d\n", x_int);
+    printf("x_dec: %f\n", x_dec);
+  }*/
+  return val;
+}
+
 // Build table from which to rand. sample words
 void InitUnigramTable() {
   int a, i;
@@ -310,10 +345,10 @@ void compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) {
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
-    dist[a] = exp(-dist[a]);
+    dist[a] = exp_fast(-dist[a]);
     //partFunc += dist[a]; TODO: Eric added this line...do we need it?
   }
-  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp(-dist[curr_z]);
+  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-dist[curr_z]);
 }
 
 /* 
@@ -378,7 +413,7 @@ void compute_c_given_w_z(float *unnormProbs_c_given_w_z_ZxCsize, float *normCons
       energy += -input_embed[w_idx + z]*context_embed[c_idx + z] + log_dim_penalty 
                 + sparsity_weight*input_embed[w_idx + z]*input_embed[w_idx + z] 
                 + sparsity_weight*context_embed[c_idx + z]*context_embed[c_idx + z];
-      unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z] = exp(-energy);
+      unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z] = exp_fast(-energy);
       normConst_c_given_w_z_Zsize[z] += unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + z];
     } 
   }
@@ -723,7 +758,7 @@ void *TrainModelThread(void *arg) {
 	float prob_c = 0, pos_prob_c = 0.0, Z_c = 0;
 	for (d = 0; d < negative; d++) { 
 	  negative_word_position = neg_context_store[d] * embed_max_size;
-	  neg_probs[d] = exp(-compute_energy(input_word_position, 
+	  neg_probs[d] = exp_fast(-compute_energy(input_word_position, 
                                                negative_word_position, curr_z));
 	  Z_c += neg_probs[d];  
 	}
@@ -731,7 +766,7 @@ void *TrainModelThread(void *arg) {
 	// now add the positive example to Z_c
 	// we can look-up this probability in unnormProbs_c_given_w_z_ZxCsize if z_hat != l+1
 	if (curr_z == local_embed_size_plus_one){
-	  pos_prob_c = exp(-compute_energy(input_word_position,
+	  pos_prob_c = exp_fast(-compute_energy(input_word_position,
 					     pos_context_store[a] * embed_max_size, curr_z));
 	}
 	else {
@@ -894,6 +929,9 @@ void TrainModel() {
   start = clock();
   // compute log of dim penalty
   log_dim_penalty = log(dim_penalty);
+  // compute exp table
+  build_exp_table(); 
+  
   int actual_iter = iter;
   if (fixed_dim_iter > 0) {
     // fixed-dim training
@@ -925,6 +963,8 @@ void TrainModel() {
   printf("Writing vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
   if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
+
+  free(exp_table);
 }
 
 int ArgPos(char *str, int argc, char **argv) {
