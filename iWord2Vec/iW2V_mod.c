@@ -30,9 +30,10 @@ char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
 int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
 real dim_penalty = 1.1;
+float global_train_loss = 0.0;
 float log_dim_penalty; //we'll compute this in the training function
 int *vocab_hash;
-long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 750, embed_current_size = 5;
+long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 750, embed_current_size = 5, global_loss_diff = 0;
 long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 0, file_size = 0;
 real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
@@ -585,7 +586,9 @@ void *TrainModelThread(void *arg) {
         printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha,
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
-        printf("loss: %f  ", train_log_probability/diff);
+	global_loss_diff += diff;
+	global_train_loss += train_log_probability;
+        printf("loss: %f  ", global_train_loss / global_loss_diff);
 	printf("curr dim: %lld\n", embed_current_size);	
         fflush(stdout);
         train_log_probability = 0.0;
