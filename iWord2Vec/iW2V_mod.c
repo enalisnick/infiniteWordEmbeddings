@@ -768,17 +768,22 @@ void *TrainModelThread(void *arg) {
 	  float temp_input_sum = 0.0;
 	  for (int v = 0; v < pos_context_counter; v++) {
 	    context_word_position = pos_context_store[v] * embed_max_size;
-	    float input_deriv = context_embed[context_word_position + j] 
-	      - sparsity_weight*2*input_embed[input_word_position + j];
-	    float context_deriv = input_embed[input_word_position + j] 
-		  - sparsity_weight*2*context_embed[context_word_position + j];
+	    // p(c_v|w_i,z_m) term is only defined for dimenions z_m and less 
+	    float input_deriv = 0.0;
+	    float context_deriv = 0.0;
 	    // p(c_v|w_i,z_m) term is only defined for dimenions z_m and less 
 	    float p_c_given_w_z = 0.0;
-	    if (j < curr_z) {  
+	    if (j < curr_z) {
+	      input_deriv = context_embed[context_word_position + j]
+		- sparsity_weight*2*input_embed[input_word_position + j];
+	      context_deriv = input_embed[input_word_position + j]
+                - sparsity_weight*2*context_embed[context_word_position + j];
+
 	      p_c_given_w_z = unnormProbs_c_given_w_z_ZxCsize[v*embed_max_size + curr_z-1]
 		/normConst_c_given_w_z_Zsize[curr_z-1];
 	      temp_input_sum += p_c_given_w_z * input_deriv;
 	    }
+	    
 	    check_value(p_c_given_w_z, "p(c|w,z)", j);
 
 	    if (v==a){
@@ -798,13 +803,12 @@ void *TrainModelThread(void *arg) {
 
 	// ADD TEMP GRADIENT STORES TO INPUT ACCUMULATOR
 	for (int j = 0; j < local_embed_size_plus_one; j++) {  
-	  float input_deriv = 0.0, context_deriv = 0.0;
+	  float input_deriv = 0.0;
 	  if (j < curr_z) {
 	    input_deriv = context_embed[pos_context_store[a] * embed_max_size + j] 
                - sparsity_weight*2*input_embed[input_word_position + j];
-	    context_deriv = input_embed[input_word_position + j] 
-               - sparsity_weight*2*context_embed[pos_context_store[a] * embed_max_size + j];
 	  }
+	  // input prediction grad should already be zero at dim greater than curr_z
 
 	  check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
 	  input_gradient_accumulator[j] += -1*(1.0/(1.0+negative))
