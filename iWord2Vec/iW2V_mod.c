@@ -632,7 +632,7 @@ void *TrainModelThread(void *arg) {
     // start of training, get current word (w)
     word = sen[sentence_position];
     input_word_position = word * embed_max_size;
-    if (word == -1) continue;
+    
     next_random = next_random * (unsigned long long)25214903917 + 11;
     b = next_random % window; // Samples(!) window size
     // since we will marginalize over the context words, ensure we have at least 4 words in the context
@@ -644,14 +644,20 @@ void *TrainModelThread(void *arg) {
       if (c < 0) continue;
       if (c >= sentence_length) continue;
       last_word = sen[c];
-      if (last_word == -1) continue;
+      if (last_word <= 0) continue;
       pos_context_store[pos_context_counter] = last_word;
       pos_context_counter++; 
     }
 
     // Check that we found some positive context words
     // If not, get a new sentence (ie continue)
-    if (pos_context_counter < 2) continue;
+    if (pos_context_counter < 2) {
+      sentence_position++;
+      if (sentence_position >= sentence_length) {
+	sentence_length = 0;
+      }
+      continue;
+    }
  
     // MAIN LOOP THROUGH POSITIVE CONTEXT
     log_prob_per_word = 0.0;
@@ -714,7 +720,7 @@ void *TrainModelThread(void *arg) {
 	next_random = next_random * (unsigned long long)25214903917 + 11;
 	negative_word = table[(next_random >> 16) % table_size];
 	if (negative_word == 0) negative_word = next_random % (vocab_size - 1) + 1;
-	if (negative_word == word) continue; 
+	if (negative_word == word || negative_word <= 0) continue; 
 	neg_context_store[d-1] = negative_word;
 	d--;
       }
@@ -783,10 +789,9 @@ void *TrainModelThread(void *arg) {
 
 	// iterate through negatives again to compute probabilities and accumulate gradients
 	for (d = 0; d < negative; d++){
-	  if (neg_context_store[d] > 0){
-	    negative_word_position = neg_context_store[d] * embed_max_size;
-	    prob_c = neg_probs[d]/Z_c;
-	    for (int j = 0; j < curr_z; j++) {
+	  negative_word_position = neg_context_store[d] * embed_max_size;
+	  prob_c = neg_probs[d]/Z_c;
+	  for (int j = 0; j < curr_z; j++) {
 	      // Important!: add to accumulator before updating
 	      input_prediction_gradient[j] += prob_c
                   * (context_embed[negative_word_position + j] 
@@ -795,7 +800,6 @@ void *TrainModelThread(void *arg) {
 	      neg_context_prediction_gradient[d*embed_max_size + j] += prob_c 
                   * (input_embed[input_word_position + j] 
                      - sparsity_weight*2*context_embed[negative_word_position + j]);
-	    }
 	  }
 	}
 
@@ -879,14 +883,13 @@ void *TrainModelThread(void *arg) {
 	
 	// update negative contexts
 	for (d = 0; d < negative; d++){
-	  if (neg_context_store[d] > 0){
 	    negative_word_position = neg_context_store[d] * embed_max_size;
 
 	    check_value(neg_context_prediction_gradient[d*embed_max_size + j], "neg context gradient acc", j);
 	    context_embed[negative_word_position + j] 
                -= (alpha * 1.0/num_z_samples) 
                   * neg_context_prediction_gradient[d*embed_max_size + j];
-	  }
+	  
 	}
       }
 
