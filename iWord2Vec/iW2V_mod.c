@@ -925,7 +925,8 @@ void *TrainModelThread(void *arg) {
 }
 
 void TrainModel() {
-  long a;
+  clock_t train_time = clock(); // start timing
+  long a;  
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
@@ -973,6 +974,10 @@ void TrainModel() {
   if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 
   free(exp_table);
+
+  clock_t diff = clock() - train_time;
+  double secs_taken = ((double)diff)/CLOCKS_PER_SEC;
+  printf("Total training time: %f min \n", secs_taken/60.0);
 }
 
 int ArgPos(char *str, int argc, char **argv) {
