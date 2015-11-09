@@ -75,8 +75,19 @@ float exp_approx(float x) {
 float exp_fast(float x) {
   int x_int = (int)x;
   float x_dec = x - x_int;
-  
-  return exp_table[x_int + EXP_LEN] * exp_approx(x_dec);   
+
+  float exp_table_val = 0.0;
+  if (x_int < -EXP_LEN) {
+    exp_table_val = exp_table[0];
+  } 
+  else if (x_int > EXP_LEN) {
+    exp_table_val = exp_table[2*EXP_LEN];
+  }
+  else {
+    exp_table_val = exp_table[x_int + EXP_LEN];
+  }
+ 
+  return exp_table_val * exp_approx(x_dec);   
 }
 
 // Build table from which to rand. sample words
@@ -925,7 +936,12 @@ void *TrainModelThread(void *arg) {
 }
 
 void TrainModel() {
-  clock_t train_time = clock(); // start timing
+  // Print start time
+  char buff[100];                                                               
+  time_t now = time (0);                                                          
+  strftime(buff, 100, "%Y-%m-%d %H:%M:%S.000", localtime (&now));               
+  printf ("Strart training: %s\n", buff); 
+
   long a;  
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
@@ -975,9 +991,10 @@ void TrainModel() {
 
   free(exp_table);
 
-  clock_t diff = clock() - train_time;
-  double secs_taken = ((double)diff)/CLOCKS_PER_SEC;
-  printf("Total training time: %f min \n", secs_taken/60.0);
+  // Print end time
+  now = time (0);                                                               
+  strftime(buff, 100, "%Y-%m-%d %H:%M:%S.000", localtime (&now));               
+  printf ("End Training: %s\n", buff);   
 }
 
 int ArgPos(char *str, int argc, char **argv) {
