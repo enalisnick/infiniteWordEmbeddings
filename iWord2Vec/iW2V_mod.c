@@ -45,7 +45,7 @@ const int table_size = 1e8;
 const double epsilon = 1e-8;
 int *table;
 
-const int EXP_LEN = 40;
+const int EXP_LEN = 100;
 float *exp_table; 
 
 /*
