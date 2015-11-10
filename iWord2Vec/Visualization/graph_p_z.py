@@ -41,10 +41,10 @@ def get_nearest_neighbors(input_embedding, in_word_idx, context_embeddings, z, k
 
 if __name__ == '__main__':
     # some hardcoded var, make as input args later
-    input_embedding_file = "/Users/enalisnick/Dropbox/iW2V-models/text8_output_single_thread_grad_fix.txt"
-    context_embedding_file = "/Users/enalisnick/Dropbox/iW2V-models/text8_context_output_single_thread_grad_fix.txt"
+    input_embedding_file = "/Users/enalisnick/Desktop/w_vec.txt"
+    context_embedding_file = "/Users/enalisnick/Desktop/c_vec.txt"
     k = 10000
-    word_to_plot = "apple"
+    word_to_plot = "bat"
     num_of_modes_to_plot = 5
     num_of_nns_to_get = 5
 
@@ -62,9 +62,6 @@ if __name__ == '__main__':
     print "computing p(z | w)..."
     word_in_embedding = in_embeddings[in_word_idx]
     p_z_w = compute_p_z_given_w(word_in_embedding, out_embeddings)
-
-    # NNs look best with dot on input-to-input embeddings
-    out_embeddings = in_embeddings
 
     # find nearest neighbors at the modes
     sorted_prob_idx = np.argsort(-1*p_z_w) # negative one so the sort is descending
