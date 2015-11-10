@@ -51,6 +51,7 @@ float *exp_table;
 float *input_grad_history, *context_grad_history;
 const double rho_adadelta = 0.95; // taken from adadelta paper
 const double epsilon_adadelta = 1e-6; // taken from adadelta paper
+
 /*
   Build table which precompute exp function for certain integer
   values
@@ -333,8 +334,8 @@ void InitNet() {
   }
   
   // intialize gradient history vectors 
-  input_grad_history = calloc(embed_max_size, sizeof(float)); 
-  context_grad_history = calloc(embed_max_size, sizeof(float));
+  input_grad_history = calloc(vocab_size * embed_max_size, sizeof(float)); 
+  context_grad_history = calloc(vocab_size * embed_max_size, sizeof(float));
 }
 
 // function to compute E(w, c, z)
@@ -890,18 +891,20 @@ void *TrainModelThread(void *arg) {
 
 	// update w_i
 	grad = input_gradient_accumulator[j];
-        input_grad_history[j] = rho_adadelta * input_grad_history[j] + (1.0-rho_adadelta) * grad*grad;
+        input_grad_history[input_word_position + j] = rho_adadelta * input_grad_history[input_word_position + j] 
+                                                      + (1.0-rho_adadelta) * grad*grad;
         input_embed[input_word_position + j] 
-           -= ((alpha * 1.0/num_z_samples)/sqrt(input_grad_history[j] + epsilon_adadelta)) * grad;
+           -= ((alpha * 1.0/num_z_samples)/sqrt(input_grad_history[input_word_position + j] + epsilon_adadelta)) * grad;
 
 	// update positive contexts
 	for (int v=0; v<pos_context_counter; v++){
 	  check_value(context_gradient_accumulator[v*embed_max_size + j], "pos context gradient acc", j);
           context_word_position = pos_context_store[v] * embed_max_size;
 	  grad = context_gradient_accumulator[v*embed_max_size + j];
-          context_grad_history[j] = rho_adadelta * context_grad_history[j] + (1.0-rho_adadelta) * grad*grad;
+          context_grad_history[context_word_position + j] = rho_adadelta * context_grad_history[context_word_position + j] 
+                                                            + (1.0-rho_adadelta) * grad*grad;
           context_embed[context_word_position + j] 
-	    -= ((alpha * 1.0/num_z_samples)/sqrt(context_grad_history[j] + epsilon_adadelta)) * grad;
+	    -= ((alpha * 1.0/num_z_samples)/sqrt(context_grad_history[context_word_position + j] + epsilon_adadelta)) * grad;
 	}
 	
 	// update negative contexts
@@ -910,9 +913,10 @@ void *TrainModelThread(void *arg) {
 
 	    check_value(neg_context_prediction_gradient[d*embed_max_size + j], "neg context gradient acc", j);
 	    grad = neg_context_prediction_gradient[d*embed_max_size + j];
-            context_grad_history[j] = rho_adadelta * context_grad_history[j] + (1.0-rho_adadelta) * grad*grad;
+            context_grad_history[negative_word_position + j] 
+              = rho_adadelta * context_grad_history[negative_word_position + j] + (1.0-rho_adadelta) * grad*grad;
             context_embed[negative_word_position + j] 
-              -= ((alpha * 1.0/num_z_samples)/sqrt(context_grad_history[j] + epsilon_adadelta)) * grad;
+              -= ((alpha * 1.0/num_z_samples)/sqrt(context_grad_history[negative_word_position + j] + epsilon_adadelta)) * grad;
 	}
       }
 
