@@ -1001,7 +1001,10 @@ void TrainModel() {
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
   if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 
+  // free globally used space
   free(exp_table);
+  free(input_grad_history);
+  free(context_grad_history);
 
   // Print end time
   now = time (0);                                                               
