@@ -890,21 +890,21 @@ void *TrainModelThread(void *arg) {
 	check_value(input_gradient_accumulator[j], "input gradient acc", j);
 
 	// update w_i
-	grad = input_gradient_accumulator[j];
+	grad = input_gradient_accumulator[j]/num_z_samples;
         input_grad_history[input_word_position + j] = rho_adadelta * input_grad_history[input_word_position + j] 
                                                       + (1.0-rho_adadelta) * grad*grad;
         input_embed[input_word_position + j] 
-           -= ((alpha * 1.0/num_z_samples)/sqrt(input_grad_history[input_word_position + j] + epsilon_adadelta)) * grad;
+           -= (alpha/sqrt(input_grad_history[input_word_position + j] + epsilon_adadelta)) * grad;
 
 	// update positive contexts
 	for (int v=0; v<pos_context_counter; v++){
 	  check_value(context_gradient_accumulator[v*embed_max_size + j], "pos context gradient acc", j);
           context_word_position = pos_context_store[v] * embed_max_size;
-	  grad = context_gradient_accumulator[v*embed_max_size + j];
+	  grad = context_gradient_accumulator[v*embed_max_size + j]/num_z_samples;
           context_grad_history[context_word_position + j] = rho_adadelta * context_grad_history[context_word_position + j] 
                                                             + (1.0-rho_adadelta) * grad*grad;
           context_embed[context_word_position + j] 
-	    -= ((alpha * 1.0/num_z_samples)/sqrt(context_grad_history[context_word_position + j] + epsilon_adadelta)) * grad;
+	    -= (alpha/sqrt(context_grad_history[context_word_position + j] + epsilon_adadelta)) * grad;
 	}
 	
 	// update negative contexts
@@ -912,11 +912,11 @@ void *TrainModelThread(void *arg) {
 	    negative_word_position = neg_context_store[d] * embed_max_size;
 
 	    check_value(neg_context_prediction_gradient[d*embed_max_size + j], "neg context gradient acc", j);
-	    grad = neg_context_prediction_gradient[d*embed_max_size + j];
+	    grad = neg_context_prediction_gradient[d*embed_max_size + j]/num_z_samples;
             context_grad_history[negative_word_position + j] 
               = rho_adadelta * context_grad_history[negative_word_position + j] + (1.0-rho_adadelta) * grad*grad;
             context_embed[negative_word_position + j] 
-              -= ((alpha * 1.0/num_z_samples)/sqrt(context_grad_history[negative_word_position + j] + epsilon_adadelta)) * grad;
+              -= (alpha/sqrt(context_grad_history[negative_word_position + j] + epsilon_adadelta)) * grad;
 	}
       }
 
