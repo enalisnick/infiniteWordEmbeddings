@@ -19,4 +19,4 @@ test_log_prob: Evaluation/test_log_prob.c
 	$(CC) Evaluation/test_log_prob.c -o Evaluation/test_log_prob $(CFLAGS)
 
 clean:
-	rm -rf iW2V iW2V_mod iW2V.dSYM *~ Evaluation/find_nearest_neighbors Evaluation/wordsim353_eval
+	rm -rf iW2V_mod iW2V_mod.dSYM *~ Evaluation/find_nearest_neighbors Evaluation/wordsim353_eval

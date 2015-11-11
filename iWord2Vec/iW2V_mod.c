@@ -26,7 +26,7 @@ typedef struct {
   bool expand;
 } ThreadArg;
 
-char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING], fixed_dim_output_file[MAX_STRING], fixed_dim_init_file[MAX_STRING];
+char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
 int debug_mode = 2, window = 5, min_count = 1, num_threads = 1, min_reduce = 1;
@@ -35,7 +35,7 @@ float global_train_loss = 0.0;
 float log_dim_penalty; //we'll compute this in the training function
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 750, embed_current_size = 5, global_loss_diff = 0;
-long long train_words = 0, word_count_actual = 0, iter = 5, fixed_dim_iter = 0, file_size = 0;
+long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0;
 real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed;
 clock_t start;
@@ -49,9 +49,11 @@ int *table;
 const int EXP_LEN = 100;
 float *exp_table; 
 
+// adadelta variables
+int adadelta_flag = 0; // 1 if we want to use AdaDelta, 0 for regular SGD
 float *input_grad_history, *context_grad_history;
-const double rho_adadelta = 0.95; // taken from adadelta paper
-const double epsilon_adadelta = 1e-6; // taken from adadelta paper
+float rho_adadelta = 0.95; // taken from adadelta paper
+float epsilon_adadelta = 0.1; // taken from https://github.com/jeevanshankar1991/Word2Vec
 
 /*
   Build table which precompute exp function for certain integer
@@ -334,9 +336,11 @@ void InitNet() {
       }
   }
   
-  // intialize gradient history vectors 
-  input_grad_history = calloc(vocab_size * embed_max_size, sizeof(float)); 
-  context_grad_history = calloc(vocab_size * embed_max_size, sizeof(float));
+  // intialize gradient history vectors if using adadelta 
+  if (adadelta_flag == 1){
+    input_grad_history = calloc(vocab_size * embed_max_size, sizeof(float)); 
+    context_grad_history = calloc(vocab_size * embed_max_size, sizeof(float));
+  }
 }
 
 // function to compute E(w, c, z)
@@ -525,10 +529,6 @@ void print_args() {
   printf("Learning rate: %f\n", (float)alpha ); 
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
   printf("Sparsity weight: %f\n", (float)sparsity_weight);
-  if (fixed_dim_iter > 0) {
-    printf("Fixed dim training iterations (epochs): %lld\n", fixed_dim_iter);
-    printf("Fixed dim output file: %s\n", fixed_dim_output_file);
-  }
   printf("#####################\n");  
 }
 
@@ -892,20 +892,30 @@ void *TrainModelThread(void *arg) {
 
 	// update w_i
 	grad = input_gradient_accumulator[j]/num_z_samples;
-        input_grad_history[input_word_position + j] = rho_adadelta * input_grad_history[input_word_position + j] 
+	if (adadelta_flag == 1){
+	  input_grad_history[input_word_position + j] = rho_adadelta * input_grad_history[input_word_position + j] 
                                                       + (1.0-rho_adadelta) * grad*grad;
-        input_embed[input_word_position + j] 
-           -= (alpha/sqrt(input_grad_history[input_word_position + j] + epsilon_adadelta)) * grad;
+	  input_embed[input_word_position + j] 
+	    -= (alpha/(sqrt(input_grad_history[input_word_position + j]) + epsilon_adadelta)) * grad;
+	}
+	else {
+	  input_embed[input_word_position + j] -= alpha * grad;
+	}
 
 	// update positive contexts
 	for (int v=0; v<pos_context_counter; v++){
 	  check_value(context_gradient_accumulator[v*embed_max_size + j], "pos context gradient acc", j);
           context_word_position = pos_context_store[v] * embed_max_size;
 	  grad = context_gradient_accumulator[v*embed_max_size + j]/num_z_samples;
-          context_grad_history[context_word_position + j] = rho_adadelta * context_grad_history[context_word_position + j] 
+	  if (adadelta_flag == 1){
+	    context_grad_history[context_word_position + j] = rho_adadelta * context_grad_history[context_word_position + j] 
                                                             + (1.0-rho_adadelta) * grad*grad;
-          context_embed[context_word_position + j] 
-	    -= (alpha/sqrt(context_grad_history[context_word_position + j] + epsilon_adadelta)) * grad;
+	    context_embed[context_word_position + j] 
+	      -= (alpha/(sqrt(context_grad_history[context_word_position + j]) + epsilon_adadelta)) * grad;
+	  }
+	  else{
+	    context_embed[context_word_position + j] -= alpha * grad;
+	  }
 	}
 	
 	// update negative contexts
@@ -914,10 +924,15 @@ void *TrainModelThread(void *arg) {
 
 	    check_value(neg_context_prediction_gradient[d*embed_max_size + j], "neg context gradient acc", j);
 	    grad = neg_context_prediction_gradient[d*embed_max_size + j]/num_z_samples;
-            context_grad_history[negative_word_position + j] 
-              = rho_adadelta * context_grad_history[negative_word_position + j] + (1.0-rho_adadelta) * grad*grad;
-            context_embed[negative_word_position + j] 
-              -= (alpha/sqrt(context_grad_history[negative_word_position + j] + epsilon_adadelta)) * grad;
+	    if (adadelta_flag == 1){
+	      context_grad_history[negative_word_position + j] 
+		= rho_adadelta * context_grad_history[negative_word_position + j] + (1.0-rho_adadelta) * grad*grad;
+	      context_embed[negative_word_position + j] 
+		-= (alpha/(sqrt(context_grad_history[negative_word_position + j]) + epsilon_adadelta)) * grad;
+	    }
+	    else{
+	      context_embed[negative_word_position + j] -= alpha * grad;
+	    }
 	}
       }
 
@@ -973,26 +988,7 @@ void TrainModel() {
   log_dim_penalty = log(dim_penalty);
   // compute exp table
   build_exp_table(); 
-  
-  int actual_iter = iter;
-  if (fixed_dim_iter > 0) {
-    // fixed-dim training
-    iter = fixed_dim_iter;
-    printf("Training fixed dim model for %lld iters \n", iter);
-    for (a = 0; a < num_threads; a++) {
-      ThreadArg arg;
-      arg.id = a;
-      arg.expand = false; 
-      pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
-    }
-    for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-    printf("Writing vectors to %s\n", fixed_dim_output_file);
-    save_vectors(fixed_dim_output_file, vocab_size, embed_current_size, vocab, input_embed);
-  }
-  // Reset training info
-  iter = actual_iter;
-  word_count_actual = 0;
-  alpha = starting_alpha;
+ 
   // expanded-dim training for desired epochs
   printf("Training expanded dim model for %lld iters \n", iter);
   for (a = 0; a < num_threads; a++) {
@@ -1002,14 +998,19 @@ void TrainModel() {
     pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
   }
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-  printf("Writing vectors to %s\n", output_file);
+  printf("Writing input vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
+  printf("Writing context vectors to %s\n", context_output_file);
   if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 
   // free globally used space
   free(exp_table);
-  free(input_grad_history);
-  free(context_grad_history);
+  if (adadelta_flag == 1){
+    free(input_grad_history);
+    free(context_grad_history);
+  }
+  free(input_embed);
+  free(context_embed);
 
   // Print end time
   now = time (0);                                                               
@@ -1057,9 +1058,7 @@ int main(int argc, char **argv) {
     printf("\t-train <file>\n");
     printf("\t\tUse text data from <file> to train the model\n");
     printf("\t-output <file>\n");
-    printf("\t\tUse <file> to save the resulting word vectors\n");
-    printf("\t-fixed_dim_output <file> \n");
-    printf("\t\tUse <file> to save resulting word vectors of fixed dimension training\n");
+    printf("\t\tUse <file> to save the resulting *input* word vectors\n");
     printf("\t-contextOutput <file>\n");
     printf("\t\tUse <file> to save the resulting *context* vectors\n");
     printf("\t-initSize <int>\n");
@@ -1076,8 +1075,6 @@ int main(int argc, char **argv) {
     printf("\t\tUse <int> threads (default 12)\n");
     printf("\t-iter <int>\n");
     printf("\t\tRun more training iterations (default 5)\n");
-    printf("\t-fixed_dim_iter <int>\n");
-    printf("\t\tHow many <int> iterations to run fixed-dimension training (default 0)\n");
     printf("\t-min-count <int>\n");
     printf("\t\tThis will discard words that appear less than <int> times; default is 5\n");
     printf("\t-alpha <float>\n");
@@ -1090,6 +1087,12 @@ int main(int argc, char **argv) {
     printf("\t\tThe vocabulary will be saved to <file>\n");
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
+    printf("\t-adaDelta <int>\n");
+    printf("\t\tFlag that, if equal to one, sets the learning rate according to the AdaDelta adaptive gradient procedure.\n");
+    printf("\t-epsilon <float>\n");
+    printf("\t\tSmall value added to the denominator of the AdaDelta ratio for stability purposes.  Default: 0.1\n");
+    printf("\t-rho <float>\n");
+    printf("\t\tValue for AdaDelta's geometric average (rho)*grad_history + (1-rho)*grad^2.  Default: 0.95\n");
     printf("\nExamples:\n");
     printf("./iW2V -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 5 -maxSize 750 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
     return 0;
@@ -1108,15 +1111,16 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-sparsityWeight", argc, argv)) > 0) sparsity_weight = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-contextOutput", argc, argv)) > 0) strcpy(context_output_file, argv[i + 1]);
-  if ((i = ArgPos((char *)"-fixed_dim_output", argc, argv)) > 0) strcpy(fixed_dim_output_file, argv[i+1]);
   if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
   if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
-  if ((i = ArgPos((char *)"-fixed_dim_iter", argc, argv)) > 0) fixed_dim_iter = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-num_samples", argc, argv)) >0 ) num_z_samples = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-adaDelta", argc, argv)) >0 ) adadelta_flag = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-epsilon", argc, argv)) > 0) epsilon_adadelta = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-rho", argc, argv)) > 0) rho_adadelta = atof(argv[i + 1]);
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
   print_args();
