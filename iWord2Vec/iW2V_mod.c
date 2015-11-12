@@ -597,7 +597,7 @@ void *TrainModelThread(void *arg) {
 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 250000) {
+    if (word_count - last_word_count > 25000) {
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
