@@ -613,9 +613,10 @@ void *TrainModelThread(void *arg) {
         fflush(stdout);
         train_log_probability = 0.0;
       }
-      // edit this schedule?
-      alpha = starting_alpha * (1 - word_count_actual / (real)(iter * train_words + 1));
-      if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
+      if (adadelta_flag != 1){
+	alpha = starting_alpha * (1 - word_count_actual / (real)(iter * train_words + 1));
+	if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
+      }
     }
     // read a new sentence / line
     if (sentence_length == 0) {
