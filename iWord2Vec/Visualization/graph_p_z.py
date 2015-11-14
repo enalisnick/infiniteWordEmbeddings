@@ -32,13 +32,13 @@ def compute_p_z_given_w(input_embedding, context_embeddings):
 def get_nearest_neighbors(word_embedding, in_word_idx, input_embeddings, context_embeddings, z, k):
     word_embedding = np.array(word_embedding[:z])
     scores = np.zeros(len(input_embeddings))
-    for idx, input_embedding in enumerate(input_embeddings):
-        input_embedding = np.array(input_embedding[:z])
-        scores[idx] = np.dot(word_embedding, np.array(input_embedding[:z]))
+    for idx, context_embedding in enumerate(context_embeddings):
+        context_embedding = np.array(context_embedding[:z])
+        scores[idx] = np.dot(word_embedding, np.array(context_embedding[:z]))
     scores[in_word_idx] = -100000
     return np.argsort(-scores)[:k]
 
-def graph_p_z_w(p_z_w, word, in_word_idx, word_embedding, input_embeddings, vocab): 
+def graph_p_z_w(p_z_w, in_word_idx, word_embedding, input_embeddings, context_embeddings, vocab): 
   num_of_modes_to_plot = 5
   d = len(word_embedding)
   num_of_nns_to_get = 5
@@ -60,7 +60,7 @@ def graph_p_z_w(p_z_w, word, in_word_idx, word_embedding, input_embeddings, voca
       if mode_flag:
 	  # get nearest neighbors at current idx
 	  modes_used.append((current_idx, p_z_w[current_idx]))
-	  nns_at_modes.append([vocab[j] for j in get_nearest_neighbors(word_in_embedding, in_word_idx, input_embeddings, context_embeddings, current_idx+1, num_of_nns_to_get).tolist()]) 
+	  nns_at_modes.append([vocab[j] for j in get_nearest_neighbors(word_embedding, in_word_idx, input_embeddings, context_embeddings, current_idx+1, num_of_nns_to_get).tolist()]) 
 	  num_of_modes_to_plot -= 1
       idx += 1
       if idx >= d:
@@ -105,5 +105,5 @@ if __name__ == '__main__':
     # NNs look best with dot on input-to-input embeddings
     # find nearest neighbors at the modes
     print "graphing..."
-    plt = graph_p_z_w(p_z_w, word_to_plot, in_word_idx, word_in_embedding, context_embeddings, in_vocab)  
+    plt = graph_p_z_w(p_z_w, in_word_idx, word_in_embedding, in_embeddings, context_embeddings, in_vocab)  
     plt.savefig("p_z_w_"+word_to_plot+".png")
