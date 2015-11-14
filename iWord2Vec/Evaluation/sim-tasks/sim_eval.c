@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "eval_lib.h"
+#include "../eval_lib.h"
 
 int my_pair_cmp(const void *const first, const void *const second);
 
@@ -12,7 +12,7 @@ const char *MEN_FILE = "Evaluation/MEN_sorted.txt";
 const int MEN_LEN = 3000;
 
 struct pair { 
-  double sim;
+  float sim;
   int index;
 };
  
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
   char file_name[max_size];
   long long vocab_size, embed_size;
   char *vocab;
-  double *vectors;
+  float *vectors;
   int is_MEN = 0;
   int full_dim = 0;
 
@@ -58,17 +58,17 @@ int main(int argc, char **argv) {
   FILE *f;
   f = fopen(sim_file_name, "rb"); 
   struct pair w2v_sim[len];
-  double human_sim[len];
+  float human_sim[len];
   int valid = 0;
   for (int i = 0; i < len; i++) { 
     char word1[max_size] = {0};
     char word2[max_size] = {0};
-    double sim = 0.0;
+    float sim = 0.0;
   
     read_str(word1, f);
     read_str(word2, f);
     
-    fscanf(f, "%lf", &sim);
+    fscanf(f, "%f", &sim);
     human_sim[i] = sim;
     fgetc(f);
     
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
 
   // Sort w2v sims & calculate rank correlation
   qsort((void *) final_w2v_sim, valid, sizeof(*final_w2v_sim), my_pair_cmp);
-  double sum_squ_dist = 0.0;
+  float sum_squ_dist = 0.0;
   for (int i = 0; i < valid; i++) {
     sum_squ_dist += (i - final_w2v_sim[i].index) * (i - final_w2v_sim[i].index);
   }
