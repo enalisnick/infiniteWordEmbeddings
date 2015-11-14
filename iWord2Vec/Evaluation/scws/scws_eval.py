@@ -1,35 +1,15 @@
 import sys
 from Evaluation.eval_lib import read_embedding_file, get_mode_z, get_nn, dot_prod_sim, get_rank_corr, cosine_sim
+from Visualization.graph_p_z import compute_p_z_given_w
 import numpy as np
 from tabulate import tabulate
 from math import exp, log
 
-SCWS_FILE = "Evaluation/ratings.txt"
+SCWS_FILE = "Evaluation/scws/ratings.txt"
 
 COSINE = "cosine"
 DOT_PROD = "dot_product"
 EXP_SIM = "exp_sim"
-
-### TODO: refactor
-def compute_unnorm_z_probs_recursively(in_vec, out_vec, max_dim):
-    sparsity_weight = 0.001
-    dim_penalty = 1.1
-    z_probs = np.zeros(max_dim)
-    for idx1 in xrange(max_dim):
-        val = -in_vec[idx1]*out_vec[idx1]  
-        for idx2 in xrange(idx1, max_dim):
-            z_probs[idx2] += val
-        z_probs[idx1] = exp(-z_probs[idx1])
-    return z_probs
-
-### TODO: refactor
-def compute_p_z_given_w(input_embedding, context_embeddings):
-    n = len(context_embeddings)
-    d = len(context_embeddings[0])
-    p_z_given_w = np.zeros(d)
-    for context_vec in context_embeddings:
-        p_z_given_w += compute_unnorm_z_probs_recursively(input_embedding, context_vec, d)
-    return list(p_z_given_w / p_z_given_w.sum())
 
 # get mean embedding from set of word indices 
 def get_mean_vector(embeddings, c_arr):
@@ -108,7 +88,7 @@ def expected_sim(w1, w2, p_z_w1, p_z_w2):
  
   return sim
 
-def eval_scws(vocab, embeddings, scws, arg_hash):
+def eval_scws(vocab, embeddings, context_embeddings, scws, arg_hash):
   iw2v_sims = [] 
   for scores,w1_idx,w2_idx,c1_idx_arr,c2_idx_arr in scws:
     w1 = embeddings[w1_idx]
@@ -121,8 +101,8 @@ def eval_scws(vocab, embeddings, scws, arg_hash):
       z = get_mode_z(w1, w2)
       sim = dot_prod_sim(w1[:z], w2[:z])
     elif arg_hash[EXP_SIM] == True: 
-      z1 = compute_p_z_given_w(w1, map2embeddings(embeddings, c1_idx_arr)) 
-      z2 = compute_p_z_given_w(w2, map2embeddings(embeddings, c2_idx_arr))
+      z1 = compute_p_z_given_w(w1, map2embeddings(context_embeddings, c1_idx_arr)) 
+      z2 = compute_p_z_given_w(w2, map2embeddings(context_embeddings, c2_idx_arr))
       sim = expected_sim(w1,w2,z1,z2) 
     
     iw2v_sims.append(sim)    
@@ -138,15 +118,16 @@ if __name__ == '__main__':
     exit()
  
   embedding_filename = sys.argv[1]
+  context_embedding_filename = sys.argv[2]
   print("Using embedding file: %s" % (embedding_filename))
   vocab, embeddings = read_embedding_file(embedding_filename)
-
+  _, context_embeddings = read_embedding_file(context_embedding_filename)
   ### Read type of sim to use
   # 0. Cosine similarity
   # 1. Dot product similarity ~ using mode z
   # 2. Expected similarity using dot product
   arg_hash = {COSINE:False, DOT_PROD:False, EXP_SIM:False}
-  arg = int(sys.argv[2]) 
+  arg = int(sys.argv[3]) 
   if arg == 0:
     arg_hash[COSINE] = True 
   elif arg == 1:
@@ -157,5 +138,5 @@ if __name__ == '__main__':
 
   scws = read_scws(vocab)
   print("read scws data")
-  corr = eval_scws(vocab, embeddings, scws, arg_hash)
+  corr = eval_scws(vocab, embeddings, context_embeddings, scws, arg_hash)
   print corr
