@@ -1,0 +1,151 @@
+This document describes the test data release for the SemEval-2010 Word Sense Induction & Disambiguation Task #14. 
+
+
+The top level folder, i.e. <test_data> contains three subfolders:
+
+a.) <verbs> - This folder contains 50 xml files. Each xml file consists of a set of instances of a polysemous target verb. The senses of a particular target verb senses should have been induced by a participating system using the training data. 
+
+The following table shows the target verbs and the number of instances for each one. 
+
+=========================
+Lemma.POS	Instances
+=========================
+apply.v		121
+reveal.v	126
+relax.v		51
+root.v		18
+introduce.v	122
+insist.v	123
+wait.v		343
+shave.v		26
+level.v		20
+commit.v	63
+expose.v	32
+appeal.v	60
+pour.v		50
+slow.v		56
+happen.v	561
+conclude.v	74
+cheat.v		16
+violate.v	79
+weigh.v		43
+frame.v		19
+regain.v	18
+operate.v	164
+swear.v		46
+sniff.v		15
+presume.v	16
+stick.v		81
+signal.v	35
+deploy.v	20
+owe.v		32
+haunt.v		17
+pursue.v	70
+figure.v	78
+straighten.v	36
+accommodate.v	12
+deny.v		112
+swim.v		28
+question.v	84
+separate.v	51
+lay.v		99
+divide.v	54
+reap.v		17
+assemble.v	37
+analyze.v	29
+mount.v		27
+observe.v	81
+cultivate.v	17
+assert.v	34
+bow.v		22
+defend.v	88
+lie.v		207
+=========================
+
+b.) nouns - This folder contains 50 xml files. Each xml file consists of a set of instances of a polysemous target noun. The senses of a particular target noun senses should have been induced by a participating system using the training data. 
+
+The following table shows the target nouns and the number of instances for each one. 
+
+=========================
+Lemma.POS	Instances
+=========================
+body.n		190
+threat.n	140
+house.n		162
+accounting.n	31
+function.n	35
+dealer.n	67
+camp.n		33
+movement.n	63
+reputation.n	28
+margin.n	60
+commission.n	50
+screen.n	28
+cell.n		84
+class.n		132
+mark.n		70
+display.n	40
+shape.n		46
+rally.n		46
+gas.n		123
+failure.n	66
+market.n	865
+air.n		174
+gap.n		51
+television.n	161
+idea.n		200
+moment.n	143
+promotion.n	27
+road.n		138
+officer.n	187
+foundation.n	52
+mind.n		111
+campaign.n	148
+innovation.n	33
+note.n		96
+chip.n		112
+office.n	332
+edge.n		32
+park.n		43
+speed.n		52
+legislation.n	70
+community.n	189
+origin.n	23
+access.n	48
+field.n		155
+flight.n	107
+challenge.n	72
+address.n	37
+entry.n		45
+guarantee.n	58
+tour.n		30
+=========================
+
+Note that in contrast to the trial test data, in this release we have added an extra XML element to each instance of a target word (noun or verb), as the following example shows.
+
+ <access.n.1>
+ The port is famous for wind shelter , deep water , non-accumulation of mud and sand , short sea - routes and long , usable coastline .  
+  <TargetSentence>
+  In more than four years , 2.2 billion yuan has been invested in the construction of harbors and docks , storage fields , support facilities and infrastructure of the ports and city , creating good conditions for building access to   the sea for the Great Southwest .  
+  </TargetSentence>
+ Currently , there are 25 berths in the whole city , of which 10 berths are of 10,000 ton level .  
+</access.n.1>
+
+This modification was done in order to help participants distinguish between the sentence in which the target word appears and its surrounding context.
+
+Participants are required to tag (disambiguate) each instance of a target word (noun or verb) with one of its induced senses (assuming that the senses have been learned using the training dataset).
+
+The output of systems should follow the usual Senseval-3 & SemEval-2007 WSI task format. The labels for learned senses can be arbitrary symbols. Please note that the labels of each induced sense must be unique. 
+
+For instance, assume that one participant system has induced 2 senses for the verb "absorb", i.e. absorb.cluster.1 and absorb.cluster.2.  These are example outputs for two instances of the word absorb:
+		
+absorb.v absorb.v.1 absorb.cluster.1 
+absorb.v absorb.v.2 absorb.cluster.1/0.8 absorb.cluster.2/0.2
+
+In the first line the system assigns sense absorb.cluster.1 to instance absorb.v.1 with weight 1 (default). 
+In the second line the system assigns to instance absorb.v.2  i.) sense absorb.cluster.1 with weight equal to 0.8 and ii.) sense absorb.cluster.2 with weight equal to 0.2.
+We recommend that participants return all induced senses per instance with associated weights, as this will enable a more objective supervised evaluation. 
+
+Participants should upload one file containing their answers to the SemEval website (http://semeval2.fbk.eu/semeval2.php?location=login_user) on or before April 2nd.
+
+Should you have a query please post it to our Google groups pages: http://groups.google.co.uk/group/semeval2010-senseinduction/
