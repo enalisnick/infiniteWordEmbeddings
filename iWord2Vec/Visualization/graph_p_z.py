@@ -28,60 +28,18 @@ def compute_p_z_given_w(input_embedding, context_embeddings, sparsity_weight=0.0
         p_z_given_w += compute_unnorm_z_probs_recursively(input_embedding, context_vec, d, sparsity_weight, dim_penalty)
     return p_z_given_w / p_z_given_w.sum()
 
-def get_nearest_neighbors(word_embedding, in_word_idx, input_embeddings, context_embeddings, z, k):
+def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, z, k):
     word_embedding = np.array(word_embedding[:z])
-    scores = np.zeros(len(input_embeddings))
+    scores = np.zeros(len(context_embeddings))
     for idx, context_embedding in enumerate(context_embeddings):
         context_embedding = np.array(context_embedding[:z])
         scores[idx] = np.dot(word_embedding, np.array(context_embedding[:z]))
     scores[in_word_idx] = -100000
     return np.argsort(-scores)[:k]
 
-def graph_p_z_w(p_z_w, in_word_idx, word_embedding, input_embeddings, context_embeddings, vocab): 
-  num_of_modes_to_plot = 5
-  d = len(word_embedding)
-  num_of_nns_to_get = 5
-
-  # find nearest neighbors at the modes
-  sorted_prob_idx = np.argsort(-1*p_z_w) # negative one so the sort is descending
-  nns_at_modes = []
-  modes_used = []
-  idx = 0
-  while num_of_modes_to_plot > 0:
-      current_idx = sorted_prob_idx[idx]
-      # check if this idx is too close to previous ones
-      mode_flag = False
-      if (current_idx==0 and p_z_w[current_idx]>p_z_w[current_idx+1]) or (current_idx==d-1 and p_z_w[current_idx]>p_z_w[current_idx-1]) or (p_z_w[current_idx]>p_z_w[current_idx-1] and p_z_w[current_idx]>p_z_w[current_idx+1]): 
-	  mode_flag = True
-	  for mode in modes_used:
-	      if abs(mode[0]-current_idx) <= 5:
-		  mode_flag = False
-      if mode_flag:
-	  # get nearest neighbors at current idx
-	  modes_used.append((current_idx, p_z_w[current_idx]))
-	  nns_at_modes.append([vocab[j] for j in get_nearest_neighbors(word_embedding, in_word_idx, input_embeddings, context_embeddings, current_idx+1, num_of_nns_to_get).tolist()]) 
-	  num_of_modes_to_plot -= 1
-      idx += 1
-      if idx >= d:
-	  break
-      
-  # plotting the distribution
-  plt.plot()
-  plt.bar([x+1 for x in range(d)], p_z_w, width=1.0, facecolor='blue', edgecolor="blue")
-  
-  # plot the nearest neighbors at the modes
-  for mode_loc, mode_nns in zip(modes_used, nns_at_modes):
-      plt.annotate(', '.join(mode_nns), xy=(mode_loc[0]+1, mode_loc[1]+0.001),  xycoords='data',
-	      xytext=(mode_loc[0]+5, mode_loc[1]+0.005), arrowprops=dict(facecolor='black', shrink=0.05, frac=0.1, headwidth=2, width=1))
-  plt.title("p(z|w="+vocab[in_word_idx]+")")
-  plt.xlim(1,d)
-  plt.ylim(0,modes_used[0][1]+0.007)
- 
-  return plt 
-
 if __name__ == '__main__':
     # hard coded parameters
-    k = 25000 # truncate the vocabulary to the top k most frequent words
+    k = 35000 # truncate the vocabulary to the top k most frequent words
     num_of_modes_to_plot = 4
     num_of_nns_to_get = 5
     sparsity = 0.0
