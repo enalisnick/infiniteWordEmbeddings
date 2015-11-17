@@ -1,0 +1,54 @@
+WWSI dataset presented in paper "Breaking Sticks and Ambiguities with Adaptive Skip-gram".
+
+wwsi.txt -- the dataset used in paper, for each word the context width is equal to 10 words.
+wwsi-full.txt -- the raw version of the dataset. Here we did not delete the punctuation
+marks, we also collected the contexts of width 60.
+
+The format is the following:
+
+<TITLE_OF_WORD_PAGE><TAB><WORD><TAB><NUMBER_OF_INPUT_LINKS><TAB><NUMBER_OF_MEANINGS>
+<TITLE_OF_MEANING1_PAGE><TAB><NUMBER_OF_INPUT_LINKS><TAB><NUMBER_OF_CONTEXTS>
+<CONTEXT1_WORD_POSITION>
+<CONTEXT1_WORDS>
+<CONTEXT2_WORD_POSITION>
+<CONTEXT2_WORDS>
+...
+<TITLE_OF_MEANING2_PAGE><TAB><NUMBER_OF_INPUT_LINKS><TAB><NUMBER_OF_CONTEXTS>
+<CONTEXT1_WORD_POSITION>
+<CONTEXT1_WORDS>
+<CONTEXT2_WORD_POSITION>
+<CONTEXT2_WORDS>
+...
+...
+<TITLE_OF_WORD_PAGE><TAB><WORD><TAB><NUMBER_OF_INPUT_LINKS><TAB><NUMBER_OF_MEANINGS>
+...
+...
+
+Each collected word is described by four attributes:
+    TITLE_OF_WORD_PAGE -- raw title of Wikipedia page related to this word
+    WORD -- word
+    NUMBER_OF_INPUT_LINKS -- number of input Wikipedia links
+    NUMBER_OF_MEANINGS -- number of collected meanings for this word
+After this desription meanings (of this word) with their contexts are enumerated.
+Each meanings is described by three attributes:
+    TITLE_OF_MEANING1_PAGE -- raw title of Wikipedia page related to the first meaning
+of current word
+    NUMBER_OF_INPUT_LINKS -- number of input Wikipedia links
+    NUMBER_OF_CONTEXTS -- number of sample contexts for this meaning
+Finally we enumerate the contexts, related to current meaning. Each contexts is described by:
+    CONTEXT1_WORD_POSITION -- the position of the word in the list of context words
+(for the first context)
+    CONTEXT1_WORDS -- list of context words (may be with punctuation marks depending on
+the state of COLLECT_RAW_TEXT flag in source code)
+
+Terms of use:
+This WWSI dataset is a derivative work of "Wikipedia: The free encyclopedia" licensed
+under CC BY-SA 3.0 (http://creativecommons.org/licenses/by-sa/3.0/).
+WWSI dataset by Dmitry Kondrashkin (kondra2lp@gmail.com), Sergey Bartunov (sbos@sbos.in),
+Anton Osokin (anton.osokin@inria.fr) and Dmitry Vetrov (vetrovd@yandex.ru) is licensed
+under CC BY-SA 3.0 (http://creativecommons.org/licenses/by-sa/3.0/).
+
+If you use this dataset please cite our paper:
+"Breaking Sticks and Ambiguities with Adaptive Skip-gram"
+Sergey Bartunov, Dmitry Kondrashkin, Anton Osokin, Dmitry Vetrov
+http://arxiv.org/abs/1502.07257
