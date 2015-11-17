@@ -2,7 +2,6 @@ import sys
 from Evaluation.eval_lib import read_embedding_file, get_mode_z, get_nn, dot_prod_sim, get_rank_corr, cosine_sim
 from Visualization.graph_p_z import compute_p_z_given_w
 import numpy as np
-from tabulate import tabulate
 from math import exp, log
 
 SCWS_FILE = "Evaluation/scws/ratings.txt"
@@ -66,11 +65,11 @@ def read_scws(vocab, scws_file=SCWS_FILE):
     c1 = [ w for w in c1 if w != '</b>' ]
     c2 = [ w for w in c2 if w != '</b>' ]
 
-    c1idx = map2vocab(vocab,c1)
-    c2idx = map2vocab(vocab,c2)
+    c1idxs = map2vocab(vocab,c1)
+    c2idxs = map2vocab(vocab,c2)
     
     try:
-      element = (sum(scores)/float(len(scores)),vocab.index(w1idx.lower()),vocab.index(w2idx.lower()),c1idx,c2idx)
+      element = (sum(scores)/float(len(scores)),vocab.index(w1idx.lower()),vocab.index(w2idx.lower()),c1idxs,c2idxs)
       scws.append(element) 
     except ValueError:
       pass
@@ -81,10 +80,8 @@ def read_scws(vocab, scws_file=SCWS_FILE):
 def expected_sim(w1, w2, p_z_w1, p_z_w2):
   sim = 0.0
   for idx, x in enumerate(w1):
-    for idx2, y in enumerate(w2):
-      i = min(idx,idx2)
-      if p_z_w1[idx] > 0.00001 and p_z_w2[idx2] > 0.00001:
-        sim +=  p_z_w1[idx] * p_z_w2[idx2] * dot_prod_sim(w1[:i],w2[:i])
+      if p_z_w1[idx] > 0.00001 and p_z_w2[idx] > 0.00001:
+        sim +=  p_z_w1[idx] * p_z_w2[idx] * dot_prod_sim(w1[:idx],w2[:idx])
  
   return sim
 

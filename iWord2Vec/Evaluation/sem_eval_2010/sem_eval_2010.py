@@ -14,6 +14,8 @@ from Evaluation.scws.scws_eval import map2embeddings, map2vocab
 TEST_DIR = 'Evaluation/sem_eval_2010/test_data/nouns/'
 GROUND_TRUTH_FILE = 'Evaluation/sem_eval_2010/ground_truth.txt'
 
+BUCKET_SIZE = 10
+
 '''  
   Read ground truth file and return dict where key is word 
   and value is dict where key is cluster name and value is list of examples
@@ -120,27 +122,41 @@ def read_test_xml(vocab, test_xml_dir):
  
   return data
 
+def get_mode_p_z_given_w(w, context_embeddings) 
+  return np.argmax(compute_p_z_given_w(w, context_embeddings), axis=0)
+
 if __name__ == '__main__':
+  # get ground truth
   ground_truth_dict = read_ground_truth()
-  '''
+
+  # read embedding files 
   embedding_filename = sys.argv[1]
-  context_embedding_filename = sys.argv[2] 
-  
+  context_embedding_filename = sys.argv[2]
   print("Using embedding file: %s" % (embedding_filename))
   vocab, embeddings = read_embedding_file(embedding_filename)
   _, context_embeddings = read_embedding_file(context_embedding_filename)
-  #read_ground_truth(GROUND_TRUTH_FILE)
+  
+  # read test data 
   test_data = read_test_xml(vocab, TEST_DIR)
   print("Finished reading test data")
 
+  iw2v_clusters = {}
   for example_name, sentence, word_idx, context_idxs in test_data['market']:
+    word = vocab[word_idx]
     w = embeddings[word_idx]
-    p_z_w = compute_p_z_given_w(w, map2embeddings(context_embeddings, context_idxs))
+    mode_z = get_mode_p_z_given_w(w, map2embeddings(context_embeddings, context_idxs))
     print(example_name)
-    #print(p_z_w)
+    print(mode_z)
+    if word not in iw2v_clusters:
+      iw2v_clusters = [[] for i in range(0, (len(w)/BUCKET_SIZE) + 1)
+    else:
+      iw2v_clusters[mode_z/BUCKET_SIZE].append(example_name)
+
+    '''
     plt = graph_p_z_w(np.array(p_z_w), word_idx, w, embeddings, context_embeddings, vocab)
     plt.title("\n".join(wrap(sentence, 60))) 
     plt.subplots_adjust(top=0.5)
     plt.savefig("Visualization/p_z_w_"+example_name+".png")
     plt.clf()
-  '''
+    '''
+  print(iw2v_clusters['market'])
