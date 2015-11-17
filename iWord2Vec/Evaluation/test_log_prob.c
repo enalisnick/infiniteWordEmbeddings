@@ -138,12 +138,15 @@ int main(int argc, char **argv) {
   float *input_vectors, *context_vectors; 
  
   // Build exp table
-  build_exp_table(exp_table);
+  build_exp_table();
  
+  // Read arguments from command line
   strcpy(input_file_name, argv[1]);
   strcpy(context_file_name, argv[2]);
   strcpy(test_file_name, argv[3]);
-  // TODO: get log_dim_penalty, dim_penalty & sparsity_weight values from file name 
+  sparsity_weight = atof(argv[4]);
+  dim_penalty = atof(argv[5]);
+  log_dim_penalty = log(dim_penalty);
   printf("Reading vectors...\n");
   read_vectors(input_file_name, &vocab_size, &embed_size, &vocab, &input_vectors);
   read_vectors(context_file_name, &vocab_size, &embed_size, &dummy_vocab, &context_vectors);
