@@ -1,5 +1,6 @@
 from math import exp, log
 from scipy import spatial
+import numpy as np
 
 ### cosine similarity
 def cosine_sim(v1,v2):
@@ -12,6 +13,24 @@ def dot_prod_sim(v1,v2):
     total += w*c  
 
   return total
+
+def compute_unnorm_z_probs_recursively(in_vec, out_vec, max_dim, sparsity_weight=0.001, log_dim_penalty=log(1.1)):
+    z_probs = np.zeros(max_dim)
+    for idx1 in xrange(max_dim):
+        val = -in_vec[idx1]*out_vec[idx1] + log_dim_penalty + sparsity_weight*in_vec[idx1]*in_vec[idx1] + sparsity_weight*out_vec[idx1]*out_vec[idx1]
+        for idx2 in xrange(idx1, max_dim):
+            z_probs[idx2] += val
+        z_probs[idx1] = exp(-z_probs[idx1])
+    return z_probs
+
+def compute_p_z_given_w(input_embedding, context_embeddings, sparsity_weight=0.001, dim_penalty=1.1):
+    n = len(context_embeddings)
+    d = len(context_embeddings[0])
+    p_z_given_w = np.zeros(d)
+    for context_vec in context_embeddings:
+        p_z_given_w += compute_unnorm_z_probs_recursively(input_embedding, context_vec, d, sparsity_weight, log(dim_penalty))
+    return p_z_given_w / p_z_given_w.sum()
+
 
 ### get z according to mode of p(z | w,c)
 def get_mode_z(v1,v2):
@@ -28,9 +47,7 @@ def get_mode_z(v1,v2):
   return z
 
 ### get z according to mode of p(z | w,c)
-def get_mode_z_context(v1,c2):
-  sparsity_weight = 0.001                                                     
-  dim_penalty = 1.1
+def get_mode_z_context(v1,c2,sparsity_weight=0.001,dim_penalty=1.1):
   z_max = len(v1)                                                               
   z = 0                                                                         
   max_prob = 0.0                                                                
@@ -94,12 +111,44 @@ def get_rank_corr(w2v_sims):
   
   return (1.0 - (6*sum_squ_distances)/(n*(n**2 - 1.0)))
 
+
+def get_mode_z_sim(vocab, embeddings, context_embeddings, word1_idx, word2_idx, 
+  sparsity_penalty=0.001, dim_penalty=1.1, use_input_to_context=False):
+  
+  word1_embedding = embeddings[word1_idx] 
+  word2_embedding = context_embeddings[word2_idx] 
+  z = get_mode_z_context(word1_embedding, word2_embedding)  
+  if not use_input_to_context:
+    word2_embedding = embeddings[word2_idx]  
+  return dot_prod_sim(word1_embedding[:z], word2_embedding[:z])
+     
+def get_p_z_w_weighted_sim(vocab, embeddings, context_embeddings, word1_idx, word2_idx, 
+  sparsity_penalty=0.001, dim_penalty=1.1, use_input_to_context=False):
+
+  K = 10
+  word1_embedding = embeddings[word1_idx]
+  word2_embedding = context_embeddings[word2_idx]
+  if not use_input_to_context:                                                  
+    word2_embedding = embeddings[word2_idx]
+
+  p_z_given_w = compute_p_z_given_w(word1_embedding, context_embeddings[:K], 
+   sparsity_penalty, dim_penalty)
+
+  word1_embedding = np.array(word1_embedding)
+  word2_embedding = np.array(word2_embedding)
+  sim = 0.
+  for i in range(0, len(p_z_given_w)):
+    sim += p_z_given_w[i] * np.dot(word1_embedding[:i+1], word2_embedding[:i+1]) 
+
+  return sim
+
 '''
   Compute pearson rank correlation for similarity file given.
   Using input & context for mode_z calculation and input & input dot-product
   for similarity.
 '''
-def get_rank_corr_for_sim(sim_file, vocab, embeddings, context_embeddings, full_dim):
+def get_rank_corr_for_sim(sim_file, vocab, embeddings, context_embeddings, sparsity_penalty=0.001, dim_penalty=1.1, 
+  full_dim=False, use_mode_z=True, use_input_to_context=False):
   w2v_sims = []
   human_sims = []
 
@@ -113,16 +162,18 @@ def get_rank_corr_for_sim(sim_file, vocab, embeddings, context_embeddings, full_
         word1_idx = vocab.index(line[0].lower())
         word2_idx = vocab.index(line[1].lower())
         human_sims.append(float(line[2]))
-        word1_embedding = embeddings[word1_idx]
         if full_dim:
+          word1_embedding = embeddings[word1_idx]
           word2_embedding = embeddings[word2_idx]
           w2v_sims.append(cosine_sim(word1_embedding, word2_embedding))
         else:
-          ### compute how many dimensions to use
-          word2_embedding = context_embeddings[word2_idx]
-          z = get_mode_z_context(word1_embedding, word2_embedding)
-          word2_embedding = embeddings[word2_idx]
-          sim = dot_prod_sim(word1_embedding[:z], word2_embedding[:z])
+          sim = 0.
+          if use_mode_z:
+            sim = get_mode_z_sim(vocab, embeddings, context_embeddings, word1_idx, word2_idx, 
+             sparsity_penalty, dim_penalty, use_input_to_context)
+          else:
+            sim = get_p_z_w_weighted_sim(vocab, embeddings, context_embeddings, word1_idx, word2_idx, 
+             sparsity_penalty, dim_penalty, use_input_to_context)          
           w2v_sims.append(sim)
       except ValueError:
         continue
