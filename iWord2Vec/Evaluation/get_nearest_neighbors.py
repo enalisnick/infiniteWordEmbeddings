@@ -33,20 +33,19 @@ def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, p_z_g
     scores = np.zeros(len(context_embeddings))
     for idx, context_embedding in enumerate(context_embeddings):
         temp_sum = 0.0
-        norm1 = 0.0
-        norm2 = 0.0
+        #norm1 = 0.0
+        #norm2 = 0.0
         for dim_idx in xrange(len(p_z_given_w)):
             temp_sum += word_embedding[dim_idx]*context_embedding[dim_idx]
-            norm1 += word_embedding[dim_idx]*word_embedding[dim_idx]
-            norm2 += context_embedding[dim_idx]*context_embedding[dim_idx]
-            scores[idx] += p_z_given_w[dim_idx] * temp_sum/(sqrt(norm1)*sqrt(norm2))
+            #norm1 += word_embedding[dim_idx]*word_embedding[dim_idx]
+            #norm2 += context_embedding[dim_idx]*context_embedding[dim_idx]
+            scores[idx] += p_z_given_w[dim_idx] * temp_sum #/(sqrt(norm1)*sqrt(norm2))
     scores[in_word_idx] = -100000
     return np.argsort(-scores)[:k]
 
 if __name__ == '__main__':
     # hard coded parameters
-    k = 15000 # truncate the vocabulary to the top k most frequent words
-    num_of_modes_to_plot = 4
+    k = 35000 # truncate the vocabulary to the top k most frequent words
     num_of_nns_to_get = 5
     sparsity = 0.0
     dim_penalty = 0.0
@@ -118,7 +117,7 @@ if __name__ == '__main__':
         else:
             p_z_w = compute_p_z_given_w(word_in_embedding, out_embeddings, sparsity, dim_penalty)
 
-        nn_idxs = get_nearest_neighbors(word_in_embedding, in_word_idx, in_embeddings, p_z_w, num_of_nns_to_get)
+        nn_idxs = get_nearest_neighbors(word_in_embedding, in_word_idx, out_embeddings, p_z_w, num_of_nns_to_get)
         
         t = []
         for i, idx in enumerate(nn_idxs):
