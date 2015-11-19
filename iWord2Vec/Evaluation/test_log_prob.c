@@ -310,8 +310,9 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
       }
       sentence_position = 0;
     }
+
     // if EOF, break
-    if (feof(fi) ) break;
+    if ( sentence_length==0 && feof(fi) ) break;
  
     // start of test, get current word (w)
     word = sen[sentence_position];
@@ -389,10 +390,10 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
       
       free(running_energies);
     }
-    total_log_prob -= (log_prob_current_context / pos_context_counter);
-    iter++;
+    total_log_prob += log_prob_current_context;
+    iter += pos_context_counter;
     //if (iter % STATUS_INTERVAL == 0)  
-    printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob);
+    //printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob/iter);
     fflush(stdout);
     free(unnormProbs_z_given_w);
 
@@ -405,7 +406,7 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
 
   free(neg_context_store);
   free(pos_context_store);
-  return (total_log_prob);
+  return (total_log_prob/iter);
 }
 
 int main(int argc, char **argv) {
