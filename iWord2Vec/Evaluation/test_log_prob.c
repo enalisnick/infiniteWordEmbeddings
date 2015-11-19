@@ -9,7 +9,7 @@
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_STRING 100
 
-#define STATUS_INTERVAL 5000
+#define STATUS_INTERVAL 5
 const int EXP_LEN = 100;
 const int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 
@@ -278,7 +278,7 @@ float compute_z_given_w(long long word, long long *context,
   return norm;
 }
 
-float get_log_prob(char *test_file_name, char *vocab, long long vocab_size, float *input_embed, float *context_embed, long embed_size) {
+float get_log_prob(char *test_file_name, float *input_embed, float *context_embed, long embed_size) {
   int negative = 5;
   int window = 5; 
   unsigned long long next_random = 1;
@@ -310,7 +310,6 @@ float get_log_prob(char *test_file_name, char *vocab, long long vocab_size, floa
       }
       sentence_position = 0;
     }
-
     // if EOF, break
     if (feof(fi) ) break;
  
@@ -319,7 +318,7 @@ float get_log_prob(char *test_file_name, char *vocab, long long vocab_size, floa
     input_word_position = word * embed_size; 
     
     pos_context_counter = 0; // size of positive context
-    a = 0;
+    b = 0;
     for (a = b; a < window * 2 + 1; a++) if (a != window) {
 	c = sentence_position - window + a;
 	if (c < 0) continue;
@@ -330,10 +329,17 @@ float get_log_prob(char *test_file_name, char *vocab, long long vocab_size, floa
 	pos_context_counter++; 
       }
 
+    if (pos_context_counter < 1){
+      sentence_position++;
+      if (sentence_position >= sentence_length) {
+	sentence_length = 0;
+	continue;
+      }
+    }
+
     // compute p(w|z) for the current word
     float *unnormProbs_z_given_w = (float *)calloc(embed_size, sizeof(float));
-    float normConst_z_given_w = 0.0;
-    normConst_z_given_w = compute_z_given_w(word, pos_context_store, 
+    float normConst_z_given_w = compute_z_given_w(word, pos_context_store, 
 					    unnormProbs_z_given_w, pos_context_counter, 
 					    embed_size);
 
@@ -385,8 +391,9 @@ float get_log_prob(char *test_file_name, char *vocab, long long vocab_size, floa
     }
     total_log_prob -= (log_prob_current_context / pos_context_counter);
     iter++;
-    if (iter % STATUS_INTERVAL == 0)  printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob);
-
+    //if (iter % STATUS_INTERVAL == 0)  
+    printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob);
+    fflush(stdout);
     free(unnormProbs_z_given_w);
 
     sentence_position++;
@@ -402,41 +409,44 @@ float get_log_prob(char *test_file_name, char *vocab, long long vocab_size, floa
 }
 
 int main(int argc, char **argv) {
-  char *vocab, *dummy_vocab;
+  char *vocab_local, *dummy_vocab;
+  long long vocab_size_local = 0;
   char input_file_name[MAX_STRING], context_file_name[MAX_STRING], test_file_name[MAX_STRING];
-  long long vocab_size;
-  float *input_embed, *context_embed;
 
-  // Build exp table                                                                                                                                                                                                         
+  // Build exp table                                                                                                                                                                                                      
   build_exp_table();
-  ReadVocab();
-  InitUnigramTable();
-
+  vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
+  vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
   // Read arguments from command line                                                                                                                                                                                            
   strcpy(input_file_name, argv[1]);
   strcpy(context_file_name, argv[2]);
   strcpy(test_file_name, argv[3]);
   strcpy(read_vocab_file, argv[4]);
-  sparsity_weight = atof(argv[4]);
-  dim_penalty = atof(argv[5]);
+  sparsity_weight = atof(argv[5]);
+  dim_penalty = atof(argv[6]);
   log_dim_penalty = log(dim_penalty);
-  // log what we read in                                                                                                                                                                                                         
-  printf("Reading vectors...\n");
+  // log what we read in                                                                                                                                                                                           
+  read_vectors(input_file_name, &vocab_size_local, &embed_size, &vocab_local, &input_embed);
+  read_vectors(context_file_name, &vocab_size_local, &embed_size, &dummy_vocab, &context_embed);
+
+  ReadVocab();
+  InitUnigramTable();
+
   printf("Input vectors: %s\n", input_file_name);
   printf("Context vectors: %s\n", context_file_name);
-  printf("Sparsity weight: %f\n", sparsity_weight);
-  printf("Dimension penalty: %f\n", dim_penalty);
-  exit(1);
-  read_vectors(input_file_name, &vocab_size, &embed_size, &vocab, &input_embed);
-  read_vectors(context_file_name, &vocab_size, &embed_size, &dummy_vocab, &context_embed);
-
+  printf("Sparsity weight: %.8f\n", sparsity_weight);
+  printf("Dimension penalty: %.8f\n", dim_penalty);
+  printf("Embedding size: %lld\n", embed_size);
+  fflush(stdout);
+  
   printf("Starting testing...\n");
-  float log_prob = get_log_prob(test_file_name, vocab, vocab_size, input_embed,
-				context_embed, embed_size);
+  float log_prob = get_log_prob(test_file_name, input_embed, context_embed, embed_size);
   free(exp_table);
+  free(vocab);
+  free(vocab_hash);
   printf("-----------------------------------\n");
   printf("Final Log Probability: %f\n", log_prob);
-
+  fflush(stdout);
   return 0;
 }
 
