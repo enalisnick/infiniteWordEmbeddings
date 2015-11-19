@@ -1,0 +1,10 @@
+Input vectors: /Users/enalisnick/Desktop/word2vec/INPUT_w2v_1B_500dim.txt
+Context vectors: /Users/enalisnick/Desktop/word2vec/CONTEXT_w2v_1B_500dim.txt
+Sparsity weight: 0.00000000
+Dimension penalty: 0.00000000
+Embedding size: 500
+Starting testing...
+-----------------------------------
+Final Log Probability: -1.557550
+
+
