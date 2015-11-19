@@ -101,7 +101,7 @@ void get_k_sim(char *vocab, double *vectors, long long vocab_size, long long emb
 }
 
 // NOTE: not storing as unit vectors
-void read_vectors(char *file_name, long long *vocab_size, long long *embed_size, char **vocab, double **vectors) {
+void read_vectors(char *file_name, long long *vocab_size, long long *embed_size, char **vocab, float **vectors) {
   FILE *f;
   f = fopen(file_name, "rb");
   // Read Header info 
@@ -109,7 +109,7 @@ void read_vectors(char *file_name, long long *vocab_size, long long *embed_size,
   fscanf(f, "%lld", embed_size);
 
   *vocab = (char *)malloc(*vocab_size * max_w * sizeof(char));
-  *vectors = (double *)malloc(*vocab_size * *embed_size * sizeof(double));
+  *vectors = (float *)malloc(*vocab_size * *embed_size * sizeof(float));
   for (int i = 0; i < *vocab_size; i++) {
     fgetc(f); // read '\n'
     int j = 0;
@@ -124,7 +124,7 @@ void read_vectors(char *file_name, long long *vocab_size, long long *embed_size,
     // store unit vector for cosine similarity
     //double len = 0;
     for (int j = 0; j < *embed_size; j++) { // read vector
-      fscanf(f, "%lf", &(*vectors)[i * *embed_size + j]);
+      fscanf(f, "%f", &(*vectors)[i * *embed_size + j]);
       //len += (*vectors)[i * *embed_size + j] * (*vectors)[i * *embed_size + j]; 
     }
     /*len = sqrt(len);
