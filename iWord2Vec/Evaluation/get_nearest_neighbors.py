@@ -45,8 +45,8 @@ def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, p_z_g
 
 if __name__ == '__main__':
     # hard coded parameters
-    k = 35000 # truncate the vocabulary to the top k most frequent words
-    num_of_nns_to_get = 5
+    k = 10000 # truncate the vocabulary to the top k most frequent words
+    num_of_nns_to_get = 20
     sparsity = 0.0
     dim_penalty = 0.0
     headers = ["Rank", "Word"]

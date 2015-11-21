@@ -9,7 +9,7 @@
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_STRING 100
 
-#define STATUS_INTERVAL 15
+#define STATUS_INTERVAL 5
 const int EXP_LEN = 100;
 const int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 
@@ -211,73 +211,6 @@ float exp_fast(float x) {
 }
 
 
-// compute p(z|w) for the word of current interest
-/*
-  Compute e^(-E(w,c,z)) for z=1,...,curr_z,curr_z+1  
-  -> dist: float array to fill; should be of size curr_z+1 
-  -> w_idx: word index
-  -> c_idx: context index
-  -> curr_z: current number of dimensions 
-*/
-void compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) { 
-  for (int a = 0; a < curr_z; a++) {
-    float val = -input_embed[w_idx + a]*context_embed[c_idx + a] 
-                +log_dim_penalty + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
-      +sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
-    for (int b = a; b < curr_z; b++) {
-      dist[b] += val;
-    }
-    dist[a] = exp_fast(-dist[a]);  
-  }
-  
-}
-
-/* 
-   Compute \sum_{c} e^(-E(w,c,z)) for each z=1,...,curr_z,curr_z+1; this array + norm represents p(z|w) 
-   -> context: list of contexts c
-   -> w_idx: position of word w 
-   -> values_z_given_w: float array to fill
-   -> true_context_size: number of contexts 
-   -> curr_z: size of current dim l; l+1 is the dimension that could be added
-*/
-float compute_z_given_w(long long word, long long *context, 
-			float *values_z_given_w, int true_context_size, long long curr_z_plus_one) {
-  // compute e^(-E(w,c,z)) for z = 1,...,curr_z,curr_z+1 for every context c
-  long long w_idx = word * embed_size;
-  // create array of size 1 x (n_dims * n_context_words)
-  float *z_dist_list = (float *) calloc(true_context_size * curr_z_plus_one, 
-                                        sizeof(float)); 
-  for (int s = 0; s < true_context_size; s++) {
-    long long c_idx = context[s] * embed_size;  
-    compute_z_dist(z_dist_list + s * curr_z_plus_one, w_idx, c_idx, 
-                   curr_z_plus_one - 1); 
-  }
-  // compute_z_dist should now have the prob. of each dim for every context word
-
-  // debug
-  /*printf("word=%s\n", vocab[word].word);
-  for (int s = 0; s < true_context_size; s++) {
-    printf("context=%d(%s)\n",  s, vocab[context[s]].word);
-    for (int t = 0; t < added_z; t++) {
-      printf("\tz=%d: %lf\n", t+1, z_dist_list[s*added_z + t]); 
-    }
-    printf("-------------------------\n");
-    }*/
- 
-  float norm = 0;
-  // sum across contexts for each z
-  for (int z = 0; z < curr_z_plus_one; z++) {
-    float sum = 0;
-    for (int a = 0; a < true_context_size; a++) {
-      sum += z_dist_list[a * curr_z_plus_one + z]; 
-    }
-    values_z_given_w[z] = sum;
-    norm += sum;
-  }
-  free(z_dist_list);
-  return norm;
-}
-
 float get_log_prob(char *test_file_name, float *input_embed, float *context_embed, long embed_size) {
   int negative = 5;
   int window = 5; 
@@ -338,11 +271,6 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
       }
     }
 
-    // compute p(w|z) for the current word
-    float *unnormProbs_z_given_w = (float *)calloc(embed_size, sizeof(float));
-    float normConst_z_given_w = compute_z_given_w(word, pos_context_store, 
-					    unnormProbs_z_given_w, pos_context_counter, 
-					    embed_size);
 
     // MAIN LOOP THROUGH POSITIVE CONTEXT
     float log_prob_current_context = 0.0;
@@ -363,38 +291,35 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
       }
 
       float prob = 0.0;
-      float weighted_sum_probs = 0.0;
-      float *running_energies = (float *)calloc(negative+1, sizeof(float));
       float Z = 0.0;
-      for (int idx = 0; idx < embed_size; idx++){
-	// get negative probabilities
-	for (d = 0; d < negative; d++) { 
+      // get negative probabilities
+      for (d = 0; d < negative; d++) { 
 	  negative_word_position = neg_context_store[d] * embed_size;
-	  running_energies[d] += -input_embed[input_word_position + idx]*context_embed[negative_word_position + idx] + log_dim_penalty + sparsity_weight*input_embed[input_word_position + idx]*input_embed[input_word_position+idx] + sparsity_weight*context_embed[negative_word_position + idx]*context_embed[negative_word_position + idx];
-	}
-	running_energies[negative] += -input_embed[input_word_position + idx]*context_embed[context_word_position + idx] + log_dim_penalty + sparsity_weight*input_embed[input_word_position + idx]*input_embed[input_word_position+idx] + sparsity_weight*context_embed[context_word_position + idx]*context_embed[context_word_position + idx];
-
-	// clear normalization
-	Z = 0.0;
-	for (d = 0; d < negative; d++){
-	  Z += exp_fast(-running_energies[d]);
-	}
-	// calculate positive prob
-	prob = exp_fast(-running_energies[negative]);
-	Z += prob;
-	prob /= Z;
-
-	weighted_sum_probs += (unnormProbs_z_given_w[idx]/normConst_z_given_w) * prob;
+	  float temp_sum = 0.0;
+	  for (int idx = 0; idx < embed_size; idx++){
+	    temp_sum += -input_embed[input_word_position + idx]*context_embed[negative_word_position + idx]; 
+	  }
+	  Z += exp_fast(-temp_sum);
       }
-      log_prob_current_context += log(weighted_sum_probs);
+
+      float temp_sum = 0.0;
+      for (int idx = 0; idx < embed_size; idx++){
+	temp_sum += -input_embed[input_word_position + idx]*context_embed[context_word_position + idx];
+      }     
       
-      free(running_energies);
+      // calculate positive prob
+      prob = exp_fast(-temp_sum);
+      Z += prob;
+      prob /= Z;
+
+      log_prob_current_context += log(prob);
+      
     }
     total_log_prob += log_prob_current_context;
     iter += pos_context_counter;
-    if (iter % STATUS_INTERVAL == 0) printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob/iter);
+    //if (iter % STATUS_INTERVAL == 0)  
+    //printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob/iter);
     fflush(stdout);
-    free(unnormProbs_z_given_w);
 
     sentence_position++;
     if (sentence_position >= sentence_length) {
@@ -422,9 +347,6 @@ int main(int argc, char **argv) {
   strcpy(context_file_name, argv[2]);
   strcpy(test_file_name, argv[3]);
   strcpy(read_vocab_file, argv[4]);
-  sparsity_weight = atof(argv[5]);
-  dim_penalty = atof(argv[6]);
-  log_dim_penalty = log(dim_penalty);
   // log what we read in                                                                                                                                                                                           
   read_vectors(input_file_name, &vocab_size_local, &embed_size, &vocab_local, &input_embed);
   read_vectors(context_file_name, &vocab_size_local, &embed_size, &dummy_vocab, &context_embed);

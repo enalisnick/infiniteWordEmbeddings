@@ -4,7 +4,7 @@ CG = g++
 #Using -Ofast instead of -O3 might result in faster code, but is supported only by newer GCC versions
 CFLAGS = -std=c99 -ggdb -lm -pthread -O3 -march=native -Wall -funroll-loops -Wno-unused-result -lgsl -lgslcblas
 
-all: iW2V_mod find_nearest_neighbors wordsim353_eval  
+all: iW2V_mod find_nearest_neighbors wordsim353_eval
 
 iW2V_mod : iW2V_mod.c
 	$(CC) iW2V_mod.c -o iW2V_mod $(CFLAGS)
@@ -18,5 +18,8 @@ wordsim353_eval: Evaluation/sim-tasks/sim_eval.c
 test_log_prob: Evaluation/test_log_prob.c
 	$(CC) Evaluation/test_log_prob.c -o Evaluation/test_log_prob $(CFLAGS)
 
+W2V_test_log_prob: Evaluation/W2V_test_log_prob.c
+	$(CC) Evaluation/W2V_test_log_prob.c -o Evaluation/W2V_test_log_prob $(CFLAGS)
+
 clean:
-	rm -rf iW2V_mod iW2V_mod.dSYM *~ Evaluation/find_nearest_neighbors Evaluation/wordsim353_eval
+	rm -rf iW2V_mod iW2V_mod.dSYM *~ Evaluation/find_nearest_neighbors Evaluation/wordsim353_eval Evaluation/W2V_test_log_prob

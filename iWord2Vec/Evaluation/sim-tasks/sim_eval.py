@@ -11,7 +11,7 @@ if __name__ == '__main__':
   ### READ INPUT ARGS
   use_full_dim = 0
   num_of_args = len(sys.argv)
-  sim_filename = SIM_FILE[0]
+  sim_filename = SIM_FILE[1]
   if num_of_args < 2:
     print "Embedding file not specified...quitting."
     exit()
@@ -35,6 +35,6 @@ if __name__ == '__main__':
     corr = get_rank_corr_for_sim(sim_filename, vocab, embeddings, context_embeddings, False)
   else:
     print("Using all dims")
-    corr = get_rank_corr_for_sim(sim_filename, vocab, embeddings, True)
+    corr = get_rank_corr_for_sim(sim_filename, vocab, embeddings, embeddings, full_dim = True)
 
   print(corr) 

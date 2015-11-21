@@ -34,14 +34,14 @@ def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, z, k)
     for idx, context_embedding in enumerate(context_embeddings):
         context_embedding = np.array(context_embedding[:z])
         scores[idx] = np.dot(word_embedding, np.array(context_embedding))
-    scores[in_word_idx] = -100000
+    #scores[in_word_idx] = -100000
     return np.argsort(-scores)[:k]
 
 if __name__ == '__main__':
     # hard coded parameters
-    k = 15000 # truncate the vocabulary to the top k most frequent words
-    num_of_modes_to_plot = 4
-    num_of_nns_to_get = 5
+    k = 12500 # truncate the vocabulary to the top k most frequent words
+    num_of_modes_to_plot = 3
+    num_of_nns_to_get = 3
     sparsity = 0.0
     dim_penalty = 0.0
     help_message = 'graph_p_z.py -i <input embeddings file> -c <context embeddings file> -w <comma separated list of words to plot> -s <optional comma separated list of words to marginalize over>'
@@ -85,8 +85,8 @@ if __name__ == '__main__':
 
     print "loading embeddings and vocabulary..."
     in_vocab, in_embeddings = read_embedding_file(input_embedding_file)
-    in_vocab = in_vocab[:k]
-    in_embeddings = in_embeddings[:k]
+    in_vocab = in_vocab #[:k]
+    in_embeddings = in_embeddings#[:k]
     out_vocab, out_embeddings = read_embedding_file(context_embedding_file)
     out_vocab = out_vocab[:k]
     out_embeddings = out_embeddings[:k]
@@ -99,7 +99,7 @@ if __name__ == '__main__':
 
     # initialize subplots
     f, axarr = plt.subplots(len(words_to_plot))
-    #f.set_size_inches(6, 10)
+    f.set_size_inches(6, 10)
 
     for plot_idx, word_to_plot in enumerate(words_to_plot):
 
@@ -126,7 +126,7 @@ if __name__ == '__main__':
             if (current_idx==0 and p_z_w[current_idx]>p_z_w[current_idx+1]) or (current_idx==d-1 and p_z_w[current_idx]>p_z_w[current_idx-1]) or (p_z_w[current_idx]>p_z_w[current_idx-1] and p_z_w[current_idx]>p_z_w[current_idx+1]): 
                 mode_flag = True
                 for mode in modes_used:
-                    if abs(mode[0]-current_idx) < 15:
+                    if abs(mode[0]-current_idx) < 7:
                         mode_flag = False
             if mode_flag:
                 # get nearest neighbors at current idx
@@ -144,11 +144,11 @@ if __name__ == '__main__':
         # plot the nearest neighbors at the modes
         for mode_loc, mode_nns in zip(modes_used, nns_at_modes):
             axarr[plot_idx].annotate(', '.join(mode_nns), xy=(mode_loc[0]+1, mode_loc[1]+0.001),  xycoords='data',
-                xytext=(mode_loc[0]+5, mode_loc[1]+0.005), bbox=dict(boxstyle='round,pad=0.2', fc='yellow', alpha=0.3),
-                arrowprops=dict(facecolor='black', shrink=0.05, frac=0.1, headwidth=2, width=1))
-        axarr[plot_idx].set_title("p(z|w="+word_to_plot+")")
+                xytext=(mode_loc[0]+5, mode_loc[1]+0.008), bbox=dict(boxstyle='round,pad=0.2', fc='yellow', alpha=0.3),
+                arrowprops=dict(facecolor='black', shrink=0.05, frac=0.1, headwidth=5, width=1))
+        #axarr[plot_idx].set_title("p(z|w="+word_to_plot+")")
         axarr[plot_idx].set_xlim([1,d])
-        axarr[plot_idx].set_ylim([0,modes_used[0][1]+0.009])
+        axarr[plot_idx].set_ylim([0,modes_used[0][1]+0.02])
 
     # save figure
     f.savefig("p_z_w_for_"+"_".join(words_to_plot)+".png")

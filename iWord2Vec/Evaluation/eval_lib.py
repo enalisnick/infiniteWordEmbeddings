@@ -125,13 +125,13 @@ def get_mode_z_sim(vocab, embeddings, context_embeddings, word1_idx, word2_idx,
 def get_p_z_w_weighted_sim(vocab, embeddings, context_embeddings, word1_idx, word2_idx, 
   sparsity_penalty=0.001, dim_penalty=1.1, use_input_to_context=False):
 
-  K = 10
+  K = 1000
   word1_embedding = embeddings[word1_idx]
   word2_embedding = context_embeddings[word2_idx]
   if not use_input_to_context:                                                  
     word2_embedding = embeddings[word2_idx]
 
-  p_z_given_w = compute_p_z_given_w(word1_embedding, context_embeddings[:K], 
+  p_z_given_w = compute_p_z_given_w(word1_embedding, context_embeddings[word2_idx], 
    sparsity_penalty, dim_penalty)
 
   word1_embedding = np.array(word1_embedding)
@@ -147,7 +147,7 @@ def get_p_z_w_weighted_sim(vocab, embeddings, context_embeddings, word1_idx, wor
   Using input & context for mode_z calculation and input & input dot-product
   for similarity.
 '''
-def get_rank_corr_for_sim(sim_file, vocab, embeddings, context_embeddings, sparsity_penalty=0.001, dim_penalty=1.1, 
+def get_rank_corr_for_sim(sim_file, vocab, embeddings, context_embeddings, sparsity_penalty=0.000001, dim_penalty=1.1, 
   full_dim=False, use_mode_z=True, use_input_to_context=False):
   w2v_sims = []
   human_sims = []
