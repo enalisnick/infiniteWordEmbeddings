@@ -1,8 +1,9 @@
 import sys
-from Evaluation.eval_lib import read_embedding_file, get_mode_z, get_nn, dot_prod_sim, get_rank_corr, cosine_sim
-from Visualization.graph_p_z import compute_p_z_given_w
+from Evaluation.eval_lib import read_embedding_file, get_mode_z, get_mode_z_context, get_nn, dot_prod_sim, get_rank_corr, cosine_sim
+from Evaluation.graph_p_z import compute_p_z_given_w
 import numpy as np
 from math import exp, log
+import re
 
 SCWS_FILE = "Evaluation/scws/ratings.txt"
 
@@ -18,7 +19,6 @@ def get_mean_vector(embeddings, c_arr):
   
   arr_sum /= len(c_arr)
   return arr_sum
-
 
 # map list of indices to list of embeddings
 def map2embeddings(embeddings, c_arr):
@@ -44,10 +44,11 @@ def map2vocab(vocab, c_arr):
   examples from dataset.
   Borrowed from: https://github.com/srifai/senna/blob/master/aistats/testscripts/scws/test.py
 '''
-def read_scws(vocab, scws_file=SCWS_FILE):
+def read_scws(vocab, scws_file=SCWS_FILE, amount=-1):
   text = open(scws_file, 'r')
 
   scws = []
+  cnt = 0
   for i,d in enumerate(text):
     split1 = d.lower().split('\t')
     idx = int(split1[0])
@@ -56,32 +57,64 @@ def read_scws(vocab, scws_file=SCWS_FILE):
     scores = [ float(dd) for dd in split1[-11:] ][1:]
     c1,c2 = split1[5:-11]
 
+    '''
+    # only use sentence in which word exists
+    search_str_period = "\\..*?<b>.*</b>.*?\\."
+    search_str_no_period_right = "\\..*?<b>.*</b>.*?"
+    search_str_no_period_left = ".*?<b>.*</b>.*?\\."
+    search_str_no_period = ".*?<b>.*</b>.*?"
+    search_strs = [search_str_period, search_str_no_period_right, 
+     search_str_no_period_left, search_str_no_period]
+    for search_str in search_strs:
+      search1 = re.search(search_str, c1) 
+      if search1 is not None:
+        c1 = search1.group(0) 
+        break
+    for search_str in search_strs:
+      search1 = re.search(search_str, c2)
+      if search1 is not None:
+        c2 = search1.group(0)
+        break  
+    '''
     c1 = [ w.replace('<b>','') for w in c1.split(' ') ]
     c2 = [ w.replace('<b>','') for w in c2.split(' ') ]
 
-    w1idx = [ w for j,w in enumerate(c1[:-1]) if w1 == w and c1[j+1] == '</b>' ][0]
-    w2idx = [ w for j,w in enumerate(c2[:-1]) if w2 == w and c2[j+1] == '</b>' ][0]
+    w1 = [ w for j,w in enumerate(c1[:-1]) if w1 == w and c1[j+1] == '</b>' ][0]
+    w2 = [ w for j,w in enumerate(c2[:-1]) if w2 == w and c2[j+1] == '</b>' ][0]
 
     c1 = [ w for w in c1 if w != '</b>' ]
     c2 = [ w for w in c2 if w != '</b>' ]
 
-    c1idxs = map2vocab(vocab,c1)
-    c2idxs = map2vocab(vocab,c2)
-    
+    c1_idxs = map2vocab(vocab,c1)
+    c2_idxs = map2vocab(vocab,c2) 
     try:
-      element = (sum(scores)/float(len(scores)),vocab.index(w1idx.lower()),vocab.index(w2idx.lower()),c1idxs,c2idxs)
+      print w1.lower(), w2.lower()
+      element = (sum(scores)/float(len(scores)),vocab.index(w1.lower()),vocab.index(w2.lower()),c1_idxs,c2_idxs)
       scws.append(element) 
     except ValueError:
       pass
-  
+    
+    cnt += 1  
+    if amount > 0 and cnt > amount: break
+
   # sort in ascending order 
   return sorted(scws, key=lambda x : x[0])
 
-def expected_sim(w1, w2, p_z_w1, p_z_w2):
+def expected_sim(w1, w2, p_z_given_w1, p_z_given_w2):
   sim = 0.0
   for idx, x in enumerate(w1):
-      if p_z_w1[idx] > 0.00001 and p_z_w2[idx] > 0.00001:
-        sim +=  p_z_w1[idx] * p_z_w2[idx] * dot_prod_sim(w1[:idx],w2[:idx])
+      if p_z_given_w1[idx] > 0.00001 and p_z_given_w2[idx] > 0.00001:
+        sim += p_z_given_w1[idx] * p_z_given_w2[idx] * dot_prod_sim(w1[:idx+1],w2[:idx+1])
+ 
+  return sim
+
+def expected_sim2(w1, w2, p_z_w1, p_z_w2):
+  sim = 0.0
+  for idx, x in enumerate(w1):
+    for idx2, y in enumerate(w2):
+      i = min(idx,idx2)
+      if p_z_w1[idx] > 0.00001 and p_z_w2[idx2] > 0.00001:
+        sim +=  p_z_w1[idx] * p_z_w2[idx2] * dot_prod_sim(w1[:i+1],w2[:i+1])
  
   return sim
 
@@ -91,17 +124,19 @@ def eval_scws(vocab, embeddings, context_embeddings, scws, arg_hash):
     w1 = embeddings[w1_idx]
     w2 = embeddings[w2_idx]
         
-    sim = 0
+    sim = 0.
     if arg_hash[COSINE] == True:
       sim = cosine_sim(w1, w2)
     elif arg_hash[DOT_PROD] == True:
-      z = get_mode_z(w1, w2)
+      c2 = context_embeddings[w2_idx]
+      z = get_mode_z_context(w1, c2)
       sim = dot_prod_sim(w1[:z], w2[:z])
     elif arg_hash[EXP_SIM] == True: 
-      z1 = compute_p_z_given_w(w1, map2embeddings(context_embeddings, c1_idx_arr)) 
-      z2 = compute_p_z_given_w(w2, map2embeddings(context_embeddings, c2_idx_arr))
-      sim = expected_sim(w1,w2,z1,z2) 
-    
+      p_z_given_w1 = compute_p_z_given_w(w1, map2embeddings(context_embeddings, c1_idx_arr)) 
+      p_z_given_w2 = compute_p_z_given_w(w2, map2embeddings(context_embeddings, c2_idx_arr))
+      sim = expected_sim2(w1,w2,p_z_given_w1,p_z_given_w2) 
+      
+    print vocab[w1_idx], vocab[w2_idx], sim
     iw2v_sims.append(sim)    
 
   return get_rank_corr(iw2v_sims)

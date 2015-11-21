@@ -32,7 +32,7 @@ if __name__ == '__main__':
   corr = 0 
   if use_full_dim == 0:
     print("Using prob derived dims")
-    corr = get_rank_corr_for_sim(sim_filename, vocab, embeddings, context_embeddings, False)
+    corr = get_rank_corr_for_sim(sim_filename, vocab, embeddings, context_embeddings, 0.001, 1.1, False)
   else:
     print("Using all dims")
     corr = get_rank_corr_for_sim(sim_filename, vocab, embeddings, embeddings, full_dim = True)
