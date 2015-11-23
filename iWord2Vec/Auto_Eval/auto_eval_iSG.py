@@ -60,7 +60,7 @@ def perform_word_sim_task(vocab, input_embeddings, context_embeddings, sparsity,
   human_sims = []
   w1_embeddings = []
   w2_embeddings = []
-  metrics = [cosine_sim, inner_prod]
+  metrics = [inner_prod] #cosine_sim]
   ### read in task sims and needed embeddings
   with open(sim_file) as f:
     for line in f:
@@ -77,7 +77,7 @@ def perform_word_sim_task(vocab, input_embeddings, context_embeddings, sparsity,
       except ValueError:
         continue
 
-  for weighted_flag in [0, 1]:
+  for weighted_flag in [1]: # ,0]:
     for metric in metrics:
       outF.write("Using metric: %s,    "%(metric.__name__))
       outF.write("Weighted by p(z|w1,w2)?: %s \n"%(bool(weighted_flag)))
