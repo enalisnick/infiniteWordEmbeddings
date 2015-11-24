@@ -119,15 +119,15 @@ if __name__ == '__main__':
         elif opt in ("-o", "--outputFile"):
             outputFile = arg
 
-    outF = open("iSG_WordSim_results.out","w")
+    outF = open(outputFile,"w")
     outF.write("Evaluating embedding files in directory: %s \n\n" %(rootDir))
 
     # get the various parameter settings
     files = [ f for f in listdir(rootDir) if isfile(join(rootDir,f)) ]
     roots = []
     for file in files:
-        if '0.05.txt' in file: # add contraints here if only want to eval a subset of files 
-            roots.append(file.split('_VECS_')[1].split('.txt')[0])
+      #if '0.05.txt' in file: # add contraints here if only want to eval a subset of files 
+      roots.append(file.split('_VECS_')[1].split('.txt')[0])
     roots = set(roots)
     for root in roots:
         sparsity = float(root.split('_')[1])

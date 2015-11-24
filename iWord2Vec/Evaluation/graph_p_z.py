@@ -39,8 +39,8 @@ def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, z, k)
 
 def plot(in_vocab_all, in_embeddings_all, in_vocab, in_embeddings, out_vocab, 
     out_embeddings, sparsity, dim_penalty, words_to_plot, sentence_embeddings=[], filename=""):
-    k = 12500 # truncate the vocabulary to the top k most frequent words
-    num_of_modes_to_plot = 3
+    k = 20000 # truncate the vocabulary to the top k most frequent words
+    num_of_modes_to_plot = 5
     num_of_nns_to_get = 3
     
     d = len(in_embeddings[0])
@@ -72,7 +72,7 @@ def plot(in_vocab_all, in_embeddings_all, in_vocab, in_embeddings, out_vocab,
             if (current_idx==0 and p_z_w[current_idx]>p_z_w[current_idx+1]) or (current_idx==d-1 and p_z_w[current_idx]>p_z_w[current_idx-1]) or (p_z_w[current_idx]>p_z_w[current_idx-1] and p_z_w[current_idx]>p_z_w[current_idx+1]):
                 mode_flag = True
             for mode in modes_used:
-                if abs(mode[0]-current_idx) < 15:
+                if abs(mode[0]-current_idx) < 12:
                     mode_flag = False
             if mode_flag:
                 # get nearest neighbors at current idx
@@ -140,8 +140,8 @@ if __name__ == '__main__':
  
     # extract dim and sparsity penalties from file names
     try:
-      sparsity = float(input_embedding_file.split('_')[3])
-      dim_penalty = float(input_embedding_file.split('_')[4])
+      sparsity = float(input_embedding_file.split('/')[-1].split('_')[3])
+      dim_penalty = float(input_embedding_file.split('/')[-1].split('_')[4])
     except ValueError:
       sparsity = 0.001
       dim_penalty = 1.1 
@@ -155,24 +155,22 @@ if __name__ == '__main__':
 
 
     print "loading embeddings and vocabulary..."
-    in_vocab, in_embeddings = read_embedding_file(input_embedding_file)
-    in_vocab = in_vocab #[:k]
-    in_embeddings = in_embeddings#[:k]
-    out_vocab, out_embeddings = read_embedding_file(context_embedding_file)
-    out_vocab_all = out_vocab
-    out_vocab = out_vocab[:k]
-    out_embeddings_all = out_embeddings
-    out_embeddings = out_embeddings[:k]
+    in_vocab_all, in_embeddings_all = read_embedding_file(input_embedding_file)
+    in_vocab = in_vocab_all[:k]
+    in_embeddings = in_embeddings_all[:k]
+    out_vocab_all, out_embeddings_all = read_embedding_file(context_embedding_file)
+    out_vocab = out_vocab_all[:k]
+    out_embeddings = out_embeddings_all[:k]
     # if a sentence is specified, get embeddings
     sentence_embeddings = []
     if len(sentence_to_marginalize_over) > 0:
         for word in sentence_to_marginalize_over:
            vocab_idx = -1
-          try: 
+           try: 
              vocab_idx = out_vocab_all.index(word)
-          except ValueError:
-             pass  
-          sentence_embeddings.append(out_embeddings_all[vocab_idx])
+           except ValueError:
+               pass  
+           sentence_embeddings.append(out_embeddings_all[vocab_idx])
 
     plot(in_vocab_all, in_embeddings_all, in_vocab, in_embeddings, out_vocab,
      out_embeddings, sparsity, dim_penalty, words_to_plot, sentence_embeddings, filename)
