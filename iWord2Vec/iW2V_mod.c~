@@ -908,7 +908,7 @@ void *TrainModelThread(void *arg) {
 	    -= (alpha/(sqrt(input_grad_history[input_word_position + j]) + epsilon_adadelta)) * grad;
 	}
 	else {
-	  input_embed[input_word_position + j] -= alpha[j] * grad;
+	  input_embed[input_word_position + j] -= alpha * grad;
 	}
 
 	// update positive contexts
@@ -923,7 +923,7 @@ void *TrainModelThread(void *arg) {
 	      -= (alpha/(sqrt(context_grad_history[context_word_position + j]) + epsilon_adadelta)) * grad;
 	  }
 	  else{
-	    context_embed[context_word_position + j] -= alpha[j] * grad;
+	    context_embed[context_word_position + j] -= alpha * grad;
 	  }
 	}
 	
@@ -940,7 +940,7 @@ void *TrainModelThread(void *arg) {
 		-= (alpha/(sqrt(context_grad_history[negative_word_position + j]) + epsilon_adadelta)) * grad;
 	    }
 	    else{
-	      context_embed[negative_word_position + j] -= alpha[j] * grad;
+	      context_embed[negative_word_position + j] -= alpha * grad;
 	    }
 	}
       }
