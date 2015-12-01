@@ -35,7 +35,7 @@ float global_train_loss = 0.0;
 float log_dim_penalty; //we'll compute this in the training function
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, embed_max_size = 750, embed_current_size = 5, global_loss_diff = 0;
-long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0, alpha_count_adjustment*;
+long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0, *alpha_count_adjustment;
 real alpha = 0.05, starting_alpha, sample = 1e-3, sparsity_weight = 0.001;
 real *input_embed, *context_embed, *alpha_per_dim;
 clock_t start;
@@ -344,7 +344,7 @@ void InitNet() {
 
   // initialize per dimension learning rate array
   alpha_per_dim = calloc(embed_max_size, sizeof(real));
-  for (b = 0; b < embed_max_size; b++) alpha_per_dim = alpha;
+  for (b = 0; b < embed_max_size; b++) alpha_per_dim[b] = alpha;
   alpha_count_adjustment = calloc(embed_max_size, sizeof(long long));
 }
 
@@ -621,7 +621,7 @@ void *TrainModelThread(void *arg) {
       if (adadelta_flag != 1){
 	for (c = 0; c < embed_current_size; c++){
 	  alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words + 1));
-	  if (alpha[c] < starting_alpha * 0.0001) alpha[c] = starting_alpha * 0.0001;
+	  if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
 	}
       }
     }
@@ -908,7 +908,7 @@ void *TrainModelThread(void *arg) {
 	    -= (alpha/(sqrt(input_grad_history[input_word_position + j]) + epsilon_adadelta)) * grad;
 	}
 	else {
-	  input_embed[input_word_position + j] -= alpha[j] * grad;
+	  input_embed[input_word_position + j] -= alpha_per_dim[j] * grad;
 	}
 
 	// update positive contexts
@@ -923,7 +923,7 @@ void *TrainModelThread(void *arg) {
 	      -= (alpha/(sqrt(context_grad_history[context_word_position + j]) + epsilon_adadelta)) * grad;
 	  }
 	  else{
-	    context_embed[context_word_position + j] -= alpha[j] * grad;
+	    context_embed[context_word_position + j] -= alpha_per_dim[j] * grad;
 	  }
 	}
 	
@@ -940,7 +940,7 @@ void *TrainModelThread(void *arg) {
 		-= (alpha/(sqrt(context_grad_history[negative_word_position + j]) + epsilon_adadelta)) * grad;
 	    }
 	    else{
-	      context_embed[negative_word_position + j] -= alpha[j] * grad;
+	      context_embed[negative_word_position + j] -= alpha_per_dim[j] * grad;
 	    }
 	}
       }
