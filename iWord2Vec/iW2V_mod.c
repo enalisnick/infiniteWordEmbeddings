@@ -6,7 +6,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <gsl/gsl_randist.h>
-#include "Evaluation/eval_lib.h"
+//#include "Evaluation/eval_lib.h"
 
 // Global Variables
 #define MAX_STRING 100
@@ -534,7 +534,8 @@ void print_args() {
   printf("Learning rate: %f\n", (float)alpha ); 
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
   printf("Sparsity weight: %f\n", (float)sparsity_weight);
-  printf("#####################\n");  
+  printf("#####################\n");
+  fflush(stdout);
 }
 
 void save_vectors(char *output_file, long long int vocab_size, long long int embed_current_size, struct vocab_word *vocab, real *input_embed) {
@@ -602,13 +603,13 @@ void *TrainModelThread(void *arg) {
 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 25000) {
+    if (word_count - last_word_count > 500000) {
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
       if ((debug_mode > 1)) {
         now=clock();
-        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha,
+        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha_per_dim[embed_current_size-1],
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
 	global_loss_diff += diff;
@@ -620,7 +621,7 @@ void *TrainModelThread(void *arg) {
       }
       if (adadelta_flag != 1){
 	for (c = 0; c < embed_current_size; c++){
-	  alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words + 1));
+	  alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * (train_words - alpha_count_adjustment[c]) + 1));
 	  if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
 	}
       }
