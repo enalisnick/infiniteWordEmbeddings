@@ -1,0 +1,20 @@
+Evaluating embedding files in directory: /Users/enalisnick/Desktop/vectors_batch2/ 
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.05_1.04_10_0.07.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.05_1.04_10_0.07.txt 
+Sparsity penalty: 0.05000000 
+Dimension penalty: 1.04 
+
+Evaluating on wordsim353 task
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5501 
+
+
+
+Evaluating on MEN task
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6346 
+
+
+

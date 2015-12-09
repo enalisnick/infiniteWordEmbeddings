@@ -1,0 +1,686 @@
+Evaluating embedding files in directory: /Users/enalisnick/Desktop/vectors/ 
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-08_1.075_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-08_1.075_2_0.05.txt 
+Sparsity penalty: 0.00000001 
+Dimension penalty: 1.07 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4114 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4995 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4168 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5391 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4428 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5512 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5572 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5995 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.0001_1.1_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.0001_1.1_2_0.05.txt 
+Sparsity penalty: 0.00010000 
+Dimension penalty: 1.10 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4030 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4985 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4061 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5327 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4331 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5390 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5310 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5828 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.0001_1.05_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.0001_1.05_2_0.05.txt 
+Sparsity penalty: 0.00010000 
+Dimension penalty: 1.05 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4318 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5150 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4536 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5545 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4805 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5863 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5847 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6421 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-08_1.05_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-08_1.05_2_0.05.txt 
+Sparsity penalty: 0.00000001 
+Dimension penalty: 1.05 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4087 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5100 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4596 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5368 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4886 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5887 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5855 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6389 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-06_1.1_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-06_1.1_2_0.05.txt 
+Sparsity penalty: 0.00000100 
+Dimension penalty: 1.10 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4378 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5376 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4089 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5296 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4480 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5528 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5110 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5823 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.0001_1.1_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.0001_1.1_50_0.05.txt 
+Sparsity penalty: 0.00010000 
+Dimension penalty: 1.10 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.3638 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4870 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4309 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5204 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4001 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5271 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5242 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5732 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.001_1.01_5_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.001_1.01_5_0.05.txt 
+Sparsity penalty: 0.00100000 
+Dimension penalty: 1.01 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4276 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5381 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4380 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5471 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4562 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5597 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5363 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5816 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.0001_1.075_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.0001_1.075_2_0.05.txt 
+Sparsity penalty: 0.00010000 
+Dimension penalty: 1.07 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4098 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5167 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4230 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5429 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4633 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5525 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5541 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6088 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-06_1.075_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-06_1.075_2_0.05.txt 
+Sparsity penalty: 0.00000100 
+Dimension penalty: 1.07 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4264 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5198 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4411 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5598 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4655 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5585 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5559 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6039 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-08_1.075_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-08_1.075_50_0.05.txt 
+Sparsity penalty: 0.00000001 
+Dimension penalty: 1.07 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4368 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5239 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4095 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5483 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4373 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5452 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5365 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5923 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-08_1.05_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-08_1.05_50_0.05.txt 
+Sparsity penalty: 0.00000001 
+Dimension penalty: 1.05 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4342 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5302 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4624 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5665 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4767 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5791 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5757 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6354 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-08_1.1_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-08_1.1_50_0.05.txt 
+Sparsity penalty: 0.00000001 
+Dimension penalty: 1.10 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4547 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5415 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4308 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5524 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4711 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5735 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5223 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5904 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-06_1.05_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-06_1.05_50_0.05.txt 
+Sparsity penalty: 0.00000100 
+Dimension penalty: 1.05 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4359 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5466 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4745 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5817 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4778 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5835 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5775 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6390 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.0001_1.075_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.0001_1.075_50_0.05.txt 
+Sparsity penalty: 0.00010000 
+Dimension penalty: 1.07 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4406 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5329 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4783 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5786 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4664 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5612 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5552 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6132 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-08_1.1_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-08_1.1_2_0.05.txt 
+Sparsity penalty: 0.00000001 
+Dimension penalty: 1.10 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4042 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5092 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4242 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5231 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4368 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5431 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5301 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5821 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-06_1.1_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-06_1.1_50_0.05.txt 
+Sparsity penalty: 0.00000100 
+Dimension penalty: 1.10 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4670 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5510 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4400 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5583 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4792 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5679 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5281 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5965 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-06_1.05_2_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-06_1.05_2_0.05.txt 
+Sparsity penalty: 0.00000100 
+Dimension penalty: 1.05 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4378 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5240 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4593 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5686 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4810 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5776 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5735 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6307 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_0.0001_1.05_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_0.0001_1.05_50_0.05.txt 
+Sparsity penalty: 0.00010000 
+Dimension penalty: 1.05 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4392 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5237 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4799 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5730 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4809 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5828 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5813 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6285 
+
+
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-06_1.075_50_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-06_1.075_50_0.05.txt 
+Sparsity penalty: 0.00000100 
+Dimension penalty: 1.07 
+
+Evaluating on wordsim353 task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4528 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5645 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.4327 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5809 
+
+
+
+Evaluating on MEN task
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.4881 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: False 
+Spearman's Rank Correlation: 0.5760 
+
+Using metric: cosine_sim,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5519 
+
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.6168 
+
+
+
