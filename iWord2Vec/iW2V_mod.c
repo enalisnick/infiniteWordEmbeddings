@@ -973,9 +973,7 @@ void *TrainModelThread(void *arg) {
   free(sum_over_z_for_context_grad);
   free(neg_probs);
   free(sum_over_z_list);
-  free(alpha_count_adjustment);
-  free(alpha_per_dim);
-
+  
   pthread_exit(NULL);
 }
 
@@ -1021,9 +1019,11 @@ void TrainModel() {
     free(input_grad_history);
     free(context_grad_history);
   }
+  free(alpha_count_adjustment);
+  free(alpha_per_dim);
   free(input_embed);
   free(context_embed);
-
+ 
   // Print end time
   now = time (0);                                                               
   strftime(buff, 100, "%Y-%m-%d %H:%M:%S.000", localtime (&now));               
