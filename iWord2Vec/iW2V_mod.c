@@ -621,7 +621,7 @@ void *TrainModelThread(void *arg) {
       }
       if (adadelta_flag != 1){
 	for (c = 0; c < embed_current_size; c++){
-	  alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * (train_words - alpha_count_adjustment[c]) + 1));
+	  alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words - alpha_count_adjustment[c] + 1));
 	  if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
 	}
       }
