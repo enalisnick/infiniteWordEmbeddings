@@ -126,7 +126,7 @@ if __name__ == '__main__':
     files = [ f for f in listdir(rootDir) if isfile(join(rootDir,f)) ]
     roots = []
     for file in files:
-      if '_1.03_' in file: # add contraints here if only want to eval a subset of files 
+      if '_1.07_' in file: # add contraints here if only want to eval a subset of files 
         roots.append(file.split('_VECS_')[1].split('.txt')[0])
     roots = set(roots)
     for root in roots:

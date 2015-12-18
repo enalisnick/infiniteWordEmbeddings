@@ -1,0 +1,20 @@
+Evaluating embedding files in directory: /Users/enalisnick/Desktop/ 
+
+#####################################################
+Input embeddings file: INPUT_VECS_sgd_1e-08_1.07_10_0.05.txt 
+Context embeddings file: CONTEXT_VECS_sgd_1e-08_1.07_10_0.05.txt 
+Sparsity penalty: 0.00000001 
+Dimension penalty: 1.07 
+
+Evaluating on wordsim353 task
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5559 
+
+
+
+Evaluating on MEN task
+Using metric: inner_prod,    Weighted by p(z|w1,w2)?: True 
+Spearman's Rank Correlation: 0.5839 
+
+
+
