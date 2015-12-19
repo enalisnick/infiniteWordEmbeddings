@@ -23,7 +23,6 @@ struct vocab_word {
 // pthread only allows passing of one argument
 typedef struct {
   int id;
-  bool expand;
 } ThreadArg;
 
 char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING];
@@ -386,49 +385,23 @@ float compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) 
 
 // prob_c_z_given_w should be of size true_context_size * curr_z_plus_one
 void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_given_w, 
-  int true_context_size, long long curr_z_plus_one) {
+  int context_size, long long curr_z_plus_one) {
   // compute e^(-E(w,c,z)) for z = 1,...,curr_z,curr_z+1 for every context c
   long long w_idx = word * embed_max_size;
-  // create array of size 1 x (n_dims * n_context_words)
-  float *z_dist_list = (float *) calloc(true_context_size * curr_z_plus_one, 
-                                        sizeof(float)); 
-  for (int s = 0; s < true_context_size; s++) {
+  float norm = 0.0;
+  for (int s = 0; s < context_size; s++) {
     long long c_idx = context[s] * embed_max_size;  
-    compute_z_dist(z_dist_list + s * curr_z_plus_one, w_idx, c_idx, 
-                   curr_z_plus_one - 1); 
+    norm += compute_z_dist(prob_c_z_given_w + s * curr_z_plus_one, w_idx, c_idx, curr_z_plus_one - 1); 
   }
   // z_dist_list should now have the prob. of each dim for every context word 
   
-  // compute normalization 
-  float norm = 0;
-  for (int s = 0; s < true_context_size; s++) {
-    for (int z = 0; z < curr_z_plus_one; z++) {
-      norm += z_dist_list[s * curr_z_plus_one + z];
-    } 
-  }
   // compute prob
   for (int s = 0; s < true_context_size; s++) {
     long long c_idx = context[s] * embed_max_size;
     for (int z = 0; z < curr_z_plus_one; z++) {
-      prob_c_z_given_w[s * curr_z_plus_one + z] = compute_energy(w_idx,c_idx,z)/norm; 
+      prob_c_z_given_w[s * curr_z_plus_one + z] = prob_c_z_given_w[s * curr_z_plus_one + z]/norm;
     }
   }
-  
-}
-
-void compute_p_c_given_w(long long word, long long *context, float *prob_c_given_w, 
-  int true_context_size, long long curr_z_plus_one) {
-  
-  float *prob_c_z_given_w = (float *) calloc(true_context_size * curr_z_plus_one, sizeof(float));
-  compute_p_c_z_given_w(word, context, prob_c_z_given_w, true_context_size, curr_z_plus_one);
-  for (int a = 0; a < true_context_size; a++) {
-    float sum = 0;
-    for (int i = 0; i < curr_z_plus_one; i++) {
-      sum += prob_c_z_given_w[a * curr_z_plus_one + i];
-    }
-    prob_c_given_w[a] = sum;
-  }
-  free(prob_c_z_given_w);
 }
 
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
@@ -531,7 +504,6 @@ void *TrainModelThread(void *arg) {
   // get thread arguments
   ThreadArg *thread_arg = (ThreadArg *)arg;
   int id = thread_arg->id;
-  bool expand = thread_arg->expand;
 
   long long a, b, d, word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
@@ -651,49 +623,40 @@ void *TrainModelThread(void *arg) {
       if (last_word == -1) continue;
       context_word_position = last_word * embed_max_size;
       pos_context_counter++;
- 
-      // lock-in value of embed_current_size for thread since its shared globally 
-      int local_embed_size_plus_one = embed_current_size + 1;  
 
-      // compute p(z|w,c)
-      normConst_z_given_w_c = compute_z_dist(unnormProbs_z_given_w_c, input_word_position,
-        context_word_position, local_embed_size_plus_one); 
-      
-      // only need to initialize dimensions less than current_size + 1 since that's all it can grow	
-      // we'd like to do this after the last gradient update but local_embed_size_plus_one may have grew, leaving old values
+      // lock-in value of embed_current_size for thread since its shared globally                                                    
+      int local_embed_size_plus_one = embed_current_size + 1;
+
+      // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                                                                            
+      // we'd like to do this after the last gradient update but local_embed_size_plus_one may have grew, leaving old values 
       for (c = 0; c < local_embed_size_plus_one; c++) {
 	input_prediction_gradient[c] = 0.0;
-	input_dimension_gradient[c] = 0.0;
-	input_gradient_accumulator[c] = 0.0; 
-       
-        pos_context_prediction_gradient[c] = 0.0;
+        input_dimension_gradient[c] = 0.0;
+        input_gradient_accumulator[c] = 0.0;
+
+	pos_context_prediction_gradient[c] = 0.0;
         pos_context_dimension_gradient[c] = 0.0;
         pos_context_gradient_accumulator[c] = 0.0;
         for (d = 0; d < negative; d++) {
-	  neg_context_prediction_gradient[d * embed_max_size + c] = 0.0;
-	}	
+          neg_context_prediction_gradient[d * embed_max_size + c] = 0.0;
+        }
+
+	unnormProbs_z_given_w_c[c] = 0.0;
       }
 
-      if (expand == true) {
-	// sample z: z_hat ~ p(z|w,c) and expand if necessary 
-	// no need to normalize, function does it for us
-	z_max = sample_from_mult_list(unnormProbs_z_given_w_c, 
-                  local_embed_size_plus_one, z_samples, num_z_samples, r2); 
-	if (z_max == local_embed_size_plus_one 
+      // compute p(z|w,c)
+      normConst_z_given_w_c = compute_z_dist(unnormProbs_z_given_w_c, input_word_position,
+        context_word_position, local_embed_size_plus_one - 1); 
+
+      // sample z: z_hat ~ p(z|w,c) and expand if necessary
+      // no need to normalize, function does it for us
+      z_max = sample_from_mult_list(unnormProbs_z_given_w_c, 
+                  local_embed_size_plus_one, z_samples, num_z_samples, r2);
+      if (z_max == local_embed_size_plus_one 
               && embed_current_size < local_embed_size_plus_one 
               && z_max < embed_max_size) {
-	  alpha_count_adjustment[embed_current_size] = word_count_actual;
-	  embed_current_size++;
-	}
-      }
-      else {
-	z_max = local_embed_size_plus_one - 1;
-	// TODO: This is ineffecient since we'll be computing                                                                                                                                            
-	// the same gradient num_of_z_samples times.  But we probably                                                                                                                          
-	// don't want to change num_of_z_samples globally   
-	for (c = 0; c < num_z_samples; c++){
-	  z_samples[c] = local_embed_size_plus_one - 1;
-	}
+	alpha_count_adjustment[embed_current_size] = word_count_actual;
+	embed_current_size++;
       }
 
       // NEGATIVE SAMPLING CONTEXT WORDS
@@ -712,18 +675,18 @@ void *TrainModelThread(void *arg) {
         tmp_idx++;
         d--;
       }
+
+      // compute p(c,z|w)
+      compute_p_c_z_given_w(word, context_list, prob_c_z_given_w, negative+1, local_embed_size_plus_one);
  
       // compute p(c|w) 
-      compute_p_c_given_w(last_word, context_list, prob_c_given_w,
-        negative+1, local_embed_size_plus_one); 
+      prob_ck_given_w = 0;
+      // NOTE: since the positive context word is in the first position of prob_c_z_given_w[idx], just used the idx
+      for (int idx = 0; idx < local_embed_size_plus_one; idx++) prob_ck_given_w += prob_c_z_given_w[idx];
       free(context_list);
-
-      compute_p_c_z_given_w(last_word, context_list, prob_c_z_given_w, 
-        negative+1, local_embed_size_plus_one);
       
       // SUM OVER THE SAMPLED Z's
       for (int m = 0; m < num_z_samples; m++) { 
-
 	int curr_z = z_samples[m];
 		
 	// CALCULATE PREDICTION TERM OF GRADIENT FOR ONE POS AND EACH NEG SAMPLE 
@@ -831,7 +794,7 @@ void *TrainModelThread(void *arg) {
 	}
       }
 
-    }
+      }
     // end loop over context (indexed by a)
 
     train_log_probability += (log_prob_per_word)/(pos_context_counter * num_z_samples);
@@ -886,7 +849,6 @@ void TrainModel() {
   for (a = 0; a < num_threads; a++) {
     ThreadArg arg;
     arg.id = a;
-    arg.expand = true; 
     pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
   }
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
