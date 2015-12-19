@@ -410,17 +410,15 @@ void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_g
   for (int s = 0; s < true_context_size; s++) {
     long long c_idx = context[s] * embed_max_size;
     for (int z = 0; z < curr_z_plus_one; z++) {
-      prob_c_z_given_w[s * curr_z_plus_one + z] = compute_energy(w_idx,c_idx,z)/norm; 
+      prob_c_z_given_w[s * curr_z_plus_one + z] = exp_fast(-compute_energy(w_idx,c_idx,z))/norm; 
     }
   }
   
 }
 
-void compute_p_c_given_w(long long word, long long *context, float *prob_c_given_w, 
-  int true_context_size, long long curr_z_plus_one) {
+void compute_p_c_given_w(long long word, long long *context, float *prob_c_z_given_w, 
+  float *prob_c_given_w, int true_context_size, long long curr_z_plus_one) {
   
-  float *prob_c_z_given_w = (float *) calloc(true_context_size * curr_z_plus_one, sizeof(float));
-  compute_p_c_z_given_w(word, context, prob_c_z_given_w, true_context_size, curr_z_plus_one);
   for (int a = 0; a < true_context_size; a++) {
     float sum = 0;
     for (int i = 0; i < curr_z_plus_one; i++) {
@@ -428,7 +426,6 @@ void compute_p_c_given_w(long long word, long long *context, float *prob_c_given
     }
     prob_c_given_w[a] = sum;
   }
-  free(prob_c_z_given_w);
 }
 
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
@@ -712,14 +709,15 @@ void *TrainModelThread(void *arg) {
         tmp_idx++;
         d--;
       }
+
+      // compute p(c,z|w)
+      compute_p_c_z_given_w(word, context_list, prob_c_z_given_w, 
+        negative+1, local_embed_size_plus_one);
  
       // compute p(c|w) 
-      compute_p_c_given_w(last_word, context_list, prob_c_given_w,
+      compute_p_c_given_w(word, context_list, prob_c_z_given_w, prob_c_given_w,
         negative+1, local_embed_size_plus_one); 
       free(context_list);
-
-      compute_p_c_z_given_w(last_word, context_list, prob_c_z_given_w, 
-        negative+1, local_embed_size_plus_one);
       
       // SUM OVER THE SAMPLED Z's
       for (int m = 0; m < num_z_samples; m++) { 
