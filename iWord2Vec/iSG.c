@@ -666,7 +666,7 @@ void *TrainModelThread(void *arg) {
       float log_prob_ck_given_w = 0.0;
       // NOTE: since the positive context word is in the first position of prob_c_z_given_w[idx], just used the idx
       for (int idx = 0; idx < local_embed_size_plus_one; idx++) log_prob_ck_given_w += prob_c_z_given_w[idx];
-      log_prob_ck_given_w = log(log_prob_ck_given_w);
+      log_prob_ck_given_w = log(log_prob_ck_given_w + epsilon);
 
       float context_E_grad = 0.0;
       float input_word_E_grad = 0.0;
