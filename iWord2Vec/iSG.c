@@ -696,23 +696,26 @@ void *TrainModelThread(void *arg) {
       }
 
       // CALC PREDICTION NORMALIZATION GRADIENT
-      for (int j = 0; j < negative + 1; j++){
-	long long context_idx = context_list[j]*embed_max_size;
-	context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_idx + j];
-        input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
-	float temp_p_c_z_given_w = 0.0;
-        for (int m = j; m < local_embed_size_plus_one; m++){
-          temp_p_c_z_given_w += prob_c_z_given_w[j*local_embed_size_plus_one + m];
+      for (int j = 0; j < local_embed_size_plus_one; j++){
+	for (d = 0; d < negative + 1; d++){
+	  long long context_idx = context_list[d]*embed_max_size;
+	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_idx + j];
+	  input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
+	  float temp_p_c_z_given_w = 0.0;
+	  for (int i = j; i < local_embed_size_plus_one; i++){
+	    temp_p_c_z_given_w += prob_c_z_given_w[d*local_embed_size_plus_one + i];
+	  }
+	  temp_p_c_z_given_w *= 1.0/(local_embed_size_plus_one - j);
+	  if (d == 0){
+	    pos_context_gradient[j] += temp_p_c_z_given_w * context_E_grad;
+	  } else{
+	    // update negative example since this is all we need
+	    check_value((temp_p_c_z_given_w * context_E_grad), "neg context gradient", j);
+	    context_embed[context_idx + j] -= alpha_per_dim[j] * (temp_p_c_z_given_w * context_E_grad);
+	  }
+	  // input_grad_accum just has the normalization grad in it
+	  input_gradient_accumulator[j] += temp_p_c_z_given_w * input_word_E_grad;
 	}
-	temp_p_c_z_given_w *= 1.0/(local_embed_size_plus_one - j);
-	if (j==0){
-	  pos_context_gradient[j] += temp_p_c_z_given_w * context_E_grad;
-	} else{
-	  // update negative example since this is all we need
-	  check_value((temp_p_c_z_given_w * context_E_grad), "neg context gradient", j);
-          context_embed[context_idx + j] -= alpha_per_dim[j] * (temp_p_c_z_given_w * context_E_grad);
-	}
-	input_gradient_accumulator[j] += temp_p_c_z_given_w * input_word_E_grad;
       }
 
       // MAKE FINAL GRAD UPDATES
