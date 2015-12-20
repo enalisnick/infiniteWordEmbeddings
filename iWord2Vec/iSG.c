@@ -385,7 +385,7 @@ float compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) 
 
 // prob_c_z_given_w should be of size true_context_size * curr_z_plus_one
 void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_given_w, 
-  int context_size, long long curr_z_plus_one) {
+  int context_size, int curr_z_plus_one) {
   // compute e^(-E(w,c,z)) for z = 1,...,curr_z,curr_z+1 for every context c
   long long w_idx = word * embed_max_size;
   float norm = 0.0;
