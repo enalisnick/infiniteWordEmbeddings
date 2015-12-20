@@ -679,8 +679,14 @@ void *TrainModelThread(void *arg) {
 	}
       }
 
+      // create variable that adjusts loops according to if dims were expanded 
+      int loop_bound = local_embed_size_plus_one - 1;
+      if (z_max == local_embed_size_plus_one){
+	loop_bound = local_embed_size_plus_one;
+      }
+
       // CALC DIMENSION GRADIENT TERM FOR POS & INPUT
-      for (int j = 0; j < local_embed_size_plus_one - 1; j++){
+      for (int j = 0; j < loop_bound; j++){
 	context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
 	input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	float temp_p_z_given_w_c = 0.0;
@@ -693,7 +699,7 @@ void *TrainModelThread(void *arg) {
       }
 
       // CALC PREDICTION NORMALIZATION GRADIENT
-      for (int j = 0; j < local_embed_size_plus_one; j++){
+      for (int j = 0; j < loop_bound; j++){
 	for (d = 0; d < negative + 1; d++){
 	  long long context_idx = context_list[d]*embed_max_size;
 	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_idx + j];
@@ -716,7 +722,7 @@ void *TrainModelThread(void *arg) {
       }
 
       // MAKE FINAL GRAD UPDATES
-      for (int j = 0; j < local_embed_size_plus_one; j++){
+      for (int j = 0; j < loop_bound; j++){
 	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += (1.0/(negative+1)) * input_gradient_accumulator[j];
 	input_embed[input_word_position + j] -= alpha_per_dim[j] * input_gradient[j];
