@@ -509,7 +509,7 @@ void *TrainModelThread(void *arg) {
   long long a, b, d, word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
   long long input_word_position, context_word_position, z_max, c, local_iter = iter;
-  float log_prob_per_word;
+  float log_prob_per_word = 0;
   unsigned long long next_random = (long long)id;
   clock_t now;
 
@@ -528,9 +528,9 @@ void *TrainModelThread(void *arg) {
   gsl_rng_set (r2, Seed2);
 
   int *z_samples = (int *) calloc(num_z_samples, sizeof(int)); // M-sized array of sampled z values
-  long long *context_list = calloc(negative + 1, sizeof(long long));
+  long long *context_list = (long long *) calloc(negative + 1, sizeof(long long));
   // terms needed for p(z|w,c)
-  float *unnormProbs_z_given_w_c = calloc(embed_max_size, sizeof(float));
+  float *unnormProbs_z_given_w_c = (float *) calloc(embed_max_size, sizeof(float));
   float normConst_z_given_w_c = 0.0; 
   // terms needed for [d log p(c_k | w_i, z hat) / d w_{i,j} ]
   float *input_gradient_accumulator = (float *) calloc(embed_max_size, sizeof(float)); // stores input (w_i) gradient across z samples
@@ -626,9 +626,6 @@ void *TrainModelThread(void *arg) {
         input_gradient[c] = 0.0;
         input_gradient_accumulator[c] = 0.0;
 	pos_context_gradient[c] = 0.0;
-        /*for (d = 0; d < negative + 1; d++) {
-          prob_c_z_given_w[d * embed_max_size + c] = 0.0;
-        }*/
 	unnormProbs_z_given_w_c[c] = 0.0;
       }
 
