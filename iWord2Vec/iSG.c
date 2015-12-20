@@ -59,7 +59,7 @@ float epsilon_adadelta = 0.1; // taken from https://github.com/jeevanshankar1991
   values
 */
 void build_exp_table() {
-  exp_table = calloc(EXP_LEN * 2 + 1, sizeof(float));
+  exp_table = (float *) calloc(EXP_LEN * 2 + 1, sizeof(float));
   for (int i = -EXP_LEN; i <= EXP_LEN; i++) {
     exp_table[i + EXP_LEN] = exp(i);
   }
@@ -342,9 +342,9 @@ void InitNet() {
   }
 
   // initialize per dimension learning rate array
-  alpha_per_dim = calloc(embed_max_size, sizeof(real));
+  alpha_per_dim = (real *) calloc(embed_max_size, sizeof(real));
   for (b = 0; b < embed_max_size; b++) alpha_per_dim[b] = alpha;
-  alpha_count_adjustment = calloc(embed_max_size, sizeof(long long));
+  alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
 }
 
 // function to compute E(w, c, z)
@@ -618,7 +618,7 @@ void *TrainModelThread(void *arg) {
       int local_embed_size_plus_one = embed_current_size + 1;
       // terms needed for p(c,z|w)
       // NOTE: intializing here because assumption is each context has local_embed_size_plus_one dims
-      float *prob_c_z_given_w = calloc(local_embed_size_plus_one * (negative + 1), sizeof(float));
+      float *prob_c_z_given_w = (float *) calloc(local_embed_size_plus_one * (negative + 1), sizeof(float));
       
       // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                                          
       // we'd like to do this after the last gradient update but local_embed_size_plus_one may have grew, leaving old values 
