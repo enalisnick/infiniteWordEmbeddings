@@ -688,8 +688,8 @@ void *TrainModelThread(void *arg) {
 	  temp_p_z_given_w_c += unnormProbs_z_given_w_c[i]/normConst_z_given_w_c;
 	}
 	temp_p_z_given_w_c *= 1.0/(local_embed_size_plus_one - j);
-	input_gradient[j] += (1-log_prob_ck_given_w) * temp_p_z_given_w_c * input_word_E_grad;
-	pos_context_gradient[j] += (1-log_prob_ck_given_w) * temp_p_z_given_w_c * context_E_grad;
+	input_gradient[j] += (log_prob_ck_given_w - 1) * temp_p_z_given_w_c * input_word_E_grad;
+	pos_context_gradient[j] += (log_prob_ck_given_w - 1) * temp_p_z_given_w_c * context_E_grad;
       }
 
       // CALC PREDICTION NORMALIZATION GRADIENT
