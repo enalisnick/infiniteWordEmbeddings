@@ -456,6 +456,7 @@ void check_value(float val, char *name, int idx) {
  
     printf("idx: %d, name=%s, val=%f\n", idx, name, val);
     printf("-------------------------\n");
+    fflush(stdout);
   }
 }
 
