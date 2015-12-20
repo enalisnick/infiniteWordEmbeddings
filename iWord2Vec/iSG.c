@@ -527,7 +527,7 @@ void *TrainModelThread(void *arg) {
   gsl_rng_set (r2, Seed2);
 
   int *z_samples = (int *) calloc(num_z_samples, sizeof(int)); // M-sized array of sampled z values
-  long long *context_list = calloc(negative + 1, sizeof(float));
+  long long *context_list = calloc(negative + 1, sizeof(long long));
   // terms needed for p(z|w,c)
   float *unnormProbs_z_given_w_c = calloc(embed_max_size, sizeof(float));
   float normConst_z_given_w_c = 0.0; 
