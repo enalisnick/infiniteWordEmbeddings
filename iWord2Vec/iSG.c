@@ -607,7 +607,7 @@ void *TrainModelThread(void *arg) {
     for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
       c = sentence_position - window + a;
       if (c < 0) continue; 
-      if (c >= sentence_length) continue;
+      if (c >= sentence_length) break;
       last_word = sen[c];
       if (last_word == -1) continue;
       context_word_position = last_word * embed_max_size;
@@ -726,7 +726,7 @@ void *TrainModelThread(void *arg) {
       // track training progress
       log_prob_per_word += -log_prob_ck_given_w;
       free(prob_c_z_given_w);
-    }
+      }
     // end loop over context (indexed by a)
     train_log_probability += (log_prob_per_word)/(pos_context_counter * num_z_samples);
     sentence_position++; 
