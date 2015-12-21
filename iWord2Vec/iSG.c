@@ -693,7 +693,7 @@ void *TrainModelThread(void *arg) {
 	for (int i = j; i < local_embed_size_plus_one; i++){
 	  temp_p_z_given_w_c += unnormProbs_z_given_w_c[i]/normConst_z_given_w_c;
 	}
-	temp_p_z_given_w_c *= 1.0/(local_embed_size_plus_one - j);
+	//temp_p_z_given_w_c *= 1.0/(local_embed_size_plus_one - j);
 	input_gradient[j] += (log_prob_ck_given_w - 1) * temp_p_z_given_w_c * input_word_E_grad;
 	pos_context_gradient[j] += (log_prob_ck_given_w - 1) * temp_p_z_given_w_c * context_E_grad;
       }
@@ -708,7 +708,7 @@ void *TrainModelThread(void *arg) {
 	  for (int i = j; i < local_embed_size_plus_one; i++){
 	    temp_p_c_z_given_w += prob_c_z_given_w[d*local_embed_size_plus_one + i];
 	  }
-	  temp_p_c_z_given_w *= 1.0/(local_embed_size_plus_one - j);
+	  //temp_p_c_z_given_w *= 1.0/(local_embed_size_plus_one - j);
 	  if (d == 0){
 	    pos_context_gradient[j] += temp_p_c_z_given_w * context_E_grad;
 	  } else{
