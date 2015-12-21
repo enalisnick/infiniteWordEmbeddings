@@ -724,7 +724,7 @@ void *TrainModelThread(void *arg) {
       // MAKE FINAL GRAD UPDATES
       for (int j = 0; j < loop_bound; j++){
 	check_value(input_gradient[j], "input_gradient", j);
-        input_gradient[j] += (1.0/(negative+1)) * input_gradient_accumulator[j];
+        input_gradient[j] += input_gradient_accumulator[j]; //(1.0/(negative+1)) *
 	input_embed[input_word_position + j] -= alpha_per_dim[j] * input_gradient[j];
 	check_value(pos_context_gradient[j], "pos_context_gradient", j);
         context_embed[context_word_position + j] -= alpha_per_dim[j] * pos_context_gradient[j];
