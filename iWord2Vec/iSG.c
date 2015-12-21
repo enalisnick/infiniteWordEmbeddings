@@ -895,7 +895,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-read-vocab", argc, argv)) > 0) strcpy(read_vocab_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
-  if ((i = ArgPos((char *)"-dim_penalty", argc, argv)) > 0) dim_penalty = atof(argv[i+1]);
+  if ((i = ArgPos((char *)"-dimPenalty", argc, argv)) > 0) dim_penalty = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-sparsityWeight", argc, argv)) > 0) sparsity_weight = atof(argv[i+1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-contextOutput", argc, argv)) > 0) strcpy(context_output_file, argv[i + 1]);
@@ -905,7 +905,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
-  if ((i = ArgPos((char *)"-num_samples", argc, argv)) >0 ) num_z_samples = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-numSamples", argc, argv)) >0 ) num_z_samples = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-adaDelta", argc, argv)) >0 ) adadelta_flag = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-epsilon", argc, argv)) > 0) epsilon_adadelta = atof(argv[i + 1]);
   if ((i = ArgPos((char *)"-rho", argc, argv)) > 0) rho_adadelta = atof(argv[i + 1]);
