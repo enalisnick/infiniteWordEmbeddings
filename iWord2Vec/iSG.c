@@ -675,7 +675,7 @@ void *TrainModelThread(void *arg) {
 	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
 	  input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	  pos_context_gradient[j] += (1.0/num_z_samples) * -log_prob_ck_given_w * context_E_grad;
-	  input_gradient[j] += (1.0/num_z_samples) * -log_prob_ck_given_w * input_word_E_grad;
+	  input_gradient[j] += (1.0/num_z_samples) * (1.0 - (1.0/(negative+1))- log_prob_ck_given_w) * input_word_E_grad;
 	}
       }
 
@@ -733,7 +733,7 @@ void *TrainModelThread(void *arg) {
       // track training progress
       log_prob_per_word += -log_prob_ck_given_w;
       free(prob_c_z_given_w);
-      }
+    }
     // end loop over context (indexed by a)
     train_log_probability += (log_prob_per_word)/(pos_context_counter * num_z_samples);
     sentence_position++; 
