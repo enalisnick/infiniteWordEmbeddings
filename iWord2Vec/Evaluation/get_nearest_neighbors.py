@@ -29,17 +29,21 @@ def compute_p_z_given_w(input_embedding, context_embeddings, sparsity_weight=0.0
         p_z_given_w += compute_unnorm_z_probs_recursively(input_embedding, context_vec, d, sparsity_weight, dim_penalty)
     return p_z_given_w / p_z_given_w.sum()
 
-def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, p_z_given_w, k):
+def compute_p_z_given_w_c(input_embedding, context_embeddings, sparsity_weight=0.001, dim_penalty=1.1):
+    n = len(context_embeddings)
+    d = len(context_embeddings[0])
+    p_z_given_w_c = np.zeros(n,d)
+    for idx,context_vec in enumerate(context_embeddings):
+        p_z_given_w_c[idx,:] = compute_unnorm_z_probs_recursively(input_embedding, context_vec, d, sparsity_weight, dim_penalty)
+    return p_z_given_w_c / p_z_given_w.sum(axis=1)
+
+def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, p_z_given_w_c, k):
     scores = np.zeros(len(context_embeddings))
     for idx, context_embedding in enumerate(context_embeddings):
         temp_sum = 0.0
-        #norm1 = 0.0
-        #norm2 = 0.0
         for dim_idx in xrange(len(p_z_given_w)):
             temp_sum += word_embedding[dim_idx]*context_embedding[dim_idx]
-            #norm1 += word_embedding[dim_idx]*word_embedding[dim_idx]
-            #norm2 += context_embedding[dim_idx]*context_embedding[dim_idx]
-            scores[idx] += p_z_given_w[dim_idx] * temp_sum #/(sqrt(norm1)*sqrt(norm2))
+            scores[idx] += p_z_given_w_c[idx,dim_idx] * temp_sum 
     scores[in_word_idx] = -100000
     return np.argsort(-scores)[:k]
 
@@ -113,11 +117,11 @@ if __name__ == '__main__':
         word_in_embedding = in_embeddings[in_word_idx]
         
         if len(sentence_to_marginalize_over)>0:
-            p_z_w = compute_p_z_given_w(word_in_embedding, sentence_embeddings, sparsity, dim_penalty)
+            p_z_w_c = compute_p_z_given_w_c(word_in_embedding, sentence_embeddings, sparsity, dim_penalty)
         else:
-            p_z_w = compute_p_z_given_w(word_in_embedding, out_embeddings, sparsity, dim_penalty)
+            p_z_w_c = compute_p_z_given_w_c(word_in_embedding, out_embeddings, sparsity, dim_penalty)
 
-        nn_idxs = get_nearest_neighbors(word_in_embedding, in_word_idx, out_embeddings, p_z_w, num_of_nns_to_get)
+        nn_idxs = get_nearest_neighbors(word_in_embedding, in_word_idx, out_embeddings, p_z_w_c, num_of_nns_to_get)
         
         t = []
         for i, idx in enumerate(nn_idxs):
