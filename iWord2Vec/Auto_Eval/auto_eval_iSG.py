@@ -21,7 +21,6 @@ def read_embedding_file(embedding_filename):
       embeddings.append([float(x) for x in line[1:]])
   return vocab, embeddings  
 
-### Calculate p(z|w) ###
 def compute_unnorm_z_probs_recursively(in_vec, out_vec, max_dim, sparsity_weight, dim_penalty):
     z_probs = np.zeros(max_dim)
     for idx1 in xrange(max_dim):
@@ -31,18 +30,19 @@ def compute_unnorm_z_probs_recursively(in_vec, out_vec, max_dim, sparsity_weight
         z_probs[idx1] = exp(-z_probs[idx1])
     return z_probs
 
-def compute_p_z_given_w(input_embedding, context_embedding, sparsity_weight=0.001, dim_penalty=1.1):
-    d = len(context_embedding)
+def compute_p_z_given_w(input_embedding, context_embeddings, sparsity_weight=0.001, dim_penalty=1.1):
+    n = len(context_embeddings)
+    d = len(context_embeddings[0])
     p_z_given_w = np.zeros(d)
-    p_z_given_w += compute_unnorm_z_probs_recursively(input_embedding, context_embedding, d, sparsity_weight, dim_penalty)
+    for context_vec in context_embeddings:
+        p_z_given_w += compute_unnorm_z_probs_recursively(input_embedding, context_vec, d, sparsity_weight, dim_penalty)
     return p_z_given_w / p_z_given_w.sum()
 
-### Sim metrics ###
-def cosine_sim(v1,v2):
-  return (1.0 - spatial.distance.cosine(v1,v2))
-
-def inner_prod(v1,v2):
-  return np.dot(v1,v2)
+def compute_p_z_given_w_c(input_embedding, context_vec, sparsity_weight=0.001,dim_penalty=1.1):
+    d = len(context_vec)
+    p_z_given_w_c = np.zeros(d)
+    p_z_given_w_c = compute_unnorm_z_probs_recursively(input_embedding, context_vec, d, sparsity_weight, dim_penalty)
+    return p_z_given_w_c / p_z_given_w_c.sum()
 
 ### Calculate Spearman
 def compute_spearman_rank(human_sims, model_sims):
@@ -56,11 +56,11 @@ def compute_spearman_rank(human_sims, model_sims):
 
 ### Get sim task performance ###
 def perform_word_sim_task(vocab, input_embeddings, context_embeddings, sparsity, dim_penalty, sim_file, outF):
+  print "entered sim task function"
   model_sims = []
   human_sims = []
   w1_embeddings = []
   w2_embeddings = []
-  metrics = [inner_prod] #cosine_sim]
   ### read in task sims and needed embeddings
   with open(sim_file) as f:
     for line in f:
@@ -77,25 +77,21 @@ def perform_word_sim_task(vocab, input_embeddings, context_embeddings, sparsity,
       except ValueError:
         continue
 
-  for weighted_flag in [1]: # ,0]:
-    for metric in metrics:
-      outF.write("Using metric: %s,    "%(metric.__name__))
-      outF.write("Weighted by p(z|w1,w2)?: %s \n"%(bool(weighted_flag)))
-      for v1, v2 in zip(w1_embeddings, w2_embeddings):
-        if weighted_flag == 1:
-          p_z_w1_w2 = compute_p_z_given_w(v1, v2, sparsity, dim_penalty)
-          temp_sum = 0.0
-          for idx, z_weight in enumerate(p_z_w1_w2): 
-            temp_sum += z_weight * metric(v1[:idx+1],v2[:idx+1])
-          model_sims.append(temp_sum)
-        else:
-          model_sims.append(metric(v1,v2))
-      outF.write("Spearman's Rank Correlation: %.4f \n\n" %(compute_spearman_rank(human_sims, model_sims)))
-      model_sims = []
+  for idx,v1 in enumerate(w1_embeddings):
+    p_z_w_c = compute_p_z_given_w_c(v1, w2_embeddings[idx], sparsity, dim_penalty)
+    temp_sum = 0.0
+    temp_prod = 0.0
+    for dim_idx, z_weight in enumerate(p_z_w_c): 
+      #print z_weight
+      temp_prod += v1[dim_idx]*w2_embeddings[idx][dim_idx]
+      temp_sum += z_weight * temp_prod
+    model_sims.append(temp_sum)
+  outF.write("Spearman's Rank Correlation: %.4f \n\n" %(compute_spearman_rank(human_sims, model_sims)))
+  outF.flush()
     
 ##### MAIN #####
 if __name__ == '__main__': 
-    k = 15000 # truncate the vocabulary to the top k most frequent words
+    k = 25000 # truncate the vocabulary to the top k most frequent words
     sparsity = 0.0
     dim_penalty = 0.0
     sim_files = {}
@@ -104,7 +100,7 @@ if __name__ == '__main__':
     rootDir = ""
     outputFile = ""
     help_message = 'auto_eval_iSG.py -r <path to directory containing embedding files> -o <name of output file>'
-    # get args                                                                                                                                                                   
+    # get args                                                                                                                                                      
     try:
         opts, args = getopt.getopt(sys.argv[1:],"hr:o:",["rootDir=","outputFile="])
     except getopt.GetoptError:
@@ -126,22 +122,22 @@ if __name__ == '__main__':
     files = [ f for f in listdir(rootDir) if isfile(join(rootDir,f)) ]
     roots = []
     for file in files:
-      if '_1.07_' in file: # add contraints here if only want to eval a subset of files 
-        roots.append(file.split('_VECS_')[1].split('.txt')[0])
+      if '_1.075_' in file: # add contraints here if only want to eval a subset of files 
+        roots.append(file.split('_vecs_')[1].split('.txt')[0])
     roots = set(roots)
     for root in roots:
-        sparsity = float(root.split('_')[1])
-        dim_penalty = float(root.split('_')[2])
+        sparsity = float(root.split('_')[0])
+        dim_penalty = float(root.split('_')[1])
     
-        input_embedding_file = "INPUT_VECS_"+root+".txt"
-        context_embedding_file = "CONTEXT_VECS_"+root+".txt"
+        input_embedding_file = "iSG_w_vecs_"+root+".txt"
+        context_embedding_file = "iSG_c_vecs_"+root+".txt"
 
         outF.write('#####################################################\n')
         outF.write('Input embeddings file: %s \n' %(input_embedding_file))
         outF.write('Context embeddings file: %s \n' %(context_embedding_file))
         outF.write('Sparsity penalty: %.8f \n' %(sparsity))
         outF.write('Dimension penalty: %.2f \n\n' %(dim_penalty))
-
+        outF.flush()
         vocab, in_embeddings = read_embedding_file(rootDir+input_embedding_file)
         #in_vocab = in_vocab[:k]
         #in_embeddings = in_embeddings[:k]
