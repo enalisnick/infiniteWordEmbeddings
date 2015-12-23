@@ -32,16 +32,16 @@ def compute_p_z_given_w(input_embedding, context_embeddings, sparsity_weight=0.0
 def compute_p_z_given_w_c(input_embedding, context_embeddings, sparsity_weight=0.001, dim_penalty=1.1):
     n = len(context_embeddings)
     d = len(context_embeddings[0])
-    p_z_given_w_c = np.zeros(n,d)
+    p_z_given_w_c = np.zeros((n,d))
     for idx,context_vec in enumerate(context_embeddings):
         p_z_given_w_c[idx,:] = compute_unnorm_z_probs_recursively(input_embedding, context_vec, d, sparsity_weight, dim_penalty)
-    return p_z_given_w_c / p_z_given_w.sum(axis=1)
+    return p_z_given_w_c / p_z_given_w_c.sum(axis=1)[:,None]
 
 def get_nearest_neighbors(word_embedding, in_word_idx, context_embeddings, p_z_given_w_c, k):
     scores = np.zeros(len(context_embeddings))
     for idx, context_embedding in enumerate(context_embeddings):
         temp_sum = 0.0
-        for dim_idx in xrange(len(p_z_given_w)):
+        for dim_idx in xrange(len(p_z_given_w_c[idx,])):
             temp_sum += word_embedding[dim_idx]*context_embedding[dim_idx]
             scores[idx] += p_z_given_w_c[idx,dim_idx] * temp_sum 
     scores[in_word_idx] = -100000
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     sentence_to_marginalize_over = []
     # get args
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:c:w:k:s:",["ifile=","cfile=","words=","numNeighbors","sentence="])
+        opts, args = getopt.getopt(sys.argv[1:],"hi:c:w:k:s:d:p:",["ifile=","cfile=","words=","numNeighbors","sentence=","dimPenalty=","sparsityPenalty="])
     except getopt.GetoptError:
         print help_message
         sys.exit(2)
@@ -82,10 +82,15 @@ if __name__ == '__main__':
             num_of_nns_to_get = int(arg)
         elif opt in ("-s", "--sentence"):
             sentence_to_marginalize_over = arg.split(',')
+        elif opt in ("-d", "--dimPenalty"):
+            dim_penalty = float(arg)
+        elif opt in ("-p", "--sparsityPenalty"):
+            sparsity = float(arg)
 
-    # extract dim and sparsity penalties from file names
-    sparsity = float(input_embedding_file.split('_')[3])
-    dim_penalty = float(input_embedding_file.split('_')[4])
+    if sparsity == 0.0 and dim_penalty == 0.0:
+      # extract dim and sparsity penalties from file names
+      sparsity = float(input_embedding_file.split('_')[3])
+      dim_penalty = float(input_embedding_file.split('_')[4])
 
     print 'Input embeddings file: ', input_embedding_file
     print 'Context embeddings file: ', context_embedding_file
@@ -103,6 +108,7 @@ if __name__ == '__main__':
     out_vocab = out_vocab[:k]
     out_embeddings = out_embeddings[:k]
     d = len(in_embeddings[0])
+    
     # if a sentence is specified, get embeddings
     sentence_embeddings = []
     if len(sentence_to_marginalize_over) > 0:
