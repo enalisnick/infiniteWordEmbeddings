@@ -881,8 +881,7 @@ void *TrainModelThread(void *arg) {
 	  // input prediction grad should already be zero at dim greater than curr_z
 
 	  check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
-	  input_gradient_accumulator[j] += -1*(1.0/(1.0+negative))
-              *((1.0 - pos_prob_c) * input_deriv - input_prediction_gradient[j]) 
+	  input_gradient_accumulator[j] += -1*((1.0 - pos_prob_c) * input_deriv - input_prediction_gradient[j]) 
               - (log_pos_prob_c*(1.0/pos_context_counter)
                 * input_dimension_gradient[j]);
 
