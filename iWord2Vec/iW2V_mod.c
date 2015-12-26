@@ -882,8 +882,7 @@ void *TrainModelThread(void *arg) {
 
 	  check_value(input_dimension_gradient[j], "input_dimension_gradient", j);
 	  input_gradient_accumulator[j] += -1*((1.0 - pos_prob_c) * input_deriv - input_prediction_gradient[j]) 
-              - (log_pos_prob_c*(1.0/pos_context_counter)
-                * input_dimension_gradient[j]);
+              - (log_pos_prob_c * input_dimension_gradient[j]);
 
 	  // reset input gradient stores
 	  input_prediction_gradient[j] = 0.0;
