@@ -1,15 +1,12 @@
 import sys
-from Evaluation.eval_lib import read_embedding_file, get_mode_z, get_mode_z_context, get_nn, dot_prod_sim, get_rank_corr, cosine_sim
+from Evaluation.eval_lib import read_embedding_file, dot_prod_sim, get_rank_corr, cosine_sim
 from Evaluation.graph_p_z import compute_p_z_given_w
+from Auto_Eval.auto_eval_iSG import compute_p_z_given_w_c 
 import numpy as np
 from math import exp, log
 import re
 
 SCWS_FILE = "Evaluation/scws/ratings.txt"
-
-COSINE = "cosine"
-DOT_PROD = "dot_product"
-EXP_SIM = "exp_sim"
 
 # get mean embedding from set of word indices 
 def get_mean_vector(embeddings, c_arr):
@@ -100,6 +97,7 @@ def read_scws(vocab, scws_file=SCWS_FILE, amount=-1):
   # sort in ascending order 
   return sorted(scws, key=lambda x : x[0])
 
+'''
 def expected_sim(w1, w2, p_z_given_w1, p_z_given_w2):
   sim = 0.0
   for idx, x in enumerate(w1):
@@ -117,25 +115,45 @@ def expected_sim2(w1, w2, p_z_w1, p_z_w2):
         sim +=  p_z_w1[idx] * p_z_w2[idx2] * dot_prod_sim(w1[:i+1],w2[:i+1])
  
   return sim
+'''
 
-def eval_scws(vocab, embeddings, context_embeddings, scws, arg_hash):
+def expected_sim(w1, w2, p_z_given_w1, p_z_given_w2):
+  sim = 0.
+  for idx, x in enumerate(w1):
+    sim += (p_z_given_w1[idx] + p_z_given_w2[idx]) * dot_prod_sim(w1[:idx+1],w2[:idx+1])
+
+  return sim
+
+def cosine_sim_main(embeddings, context_embeddings, w1_idx, w2_idx, c1_idx_arr, c2_idx_arr, sparsity, dim_penalty):
+  w1 = embeddings[w1_idx]
+  w2 = embeddings[w2_idx]
+  return cosine_sim(w1, w2)
+
+def p_z_w_c_sim(embeddings, context_embeddings, w1_idx, w2_idx, c1_idx_arr, c2_idx_arr, sparsity, dim_penalty):
+  w1 = embeddings[w1_idx]
+  c2 = context_embeddings[w2_idx]
+  p_z_w_c = compute_p_z_given_w_c(w1, c2, sparsity, dim_penalty) 
+  temp_sum = 0.0                                                              
+  temp_prod = 0.0                                                             
+  for dim_idx, z_weight in enumerate(p_z_w_c):                                
+    temp_prod += w1[dim_idx]*c2[dim_idx]                      
+    temp_sum += z_weight * temp_prod 
+  
+  return temp_sum
+
+def p_z_w_sim(embeddings, context_embeddings, w1_idx, w2_idx, c1_idx_arr, c2_idx_arr, sparsity, dim_penalty):
+  w1 = embeddings[w1_idx]                                                       
+  w2 = embeddings[w2_idx] 
+  c1 = map2embeddings(context_embeddings, c1_idx_arr)
+  c2 = map2embeddings(context_embeddings, c2_idx_arr)
+  p_z_given_w1 = compute_p_z_given_w(w1, c1, sparsity, dim_penalty)
+  p_z_given_w2 = compute_p_z_given_w(w2, c2, sparsity, dim_penalty)
+  return expected_sim(w1, w2, p_z_given_w1, p_z_given_w2)
+
+def eval_scws(scws, embeddings, context_embeddings, sparsity, dim_penalty, sim_func):
   iw2v_sims = [] 
   for scores,w1_idx,w2_idx,c1_idx_arr,c2_idx_arr in scws:
-    w1 = embeddings[w1_idx]
-    w2 = embeddings[w2_idx]
-        
-    sim = 0.
-    if arg_hash[COSINE] == True:
-      sim = cosine_sim(w1, w2)
-    elif arg_hash[DOT_PROD] == True:
-      c2 = context_embeddings[w2_idx]
-      z = get_mode_z_context(w1, c2)
-      sim = dot_prod_sim(w1[:z], w2[:z])
-    elif arg_hash[EXP_SIM] == True: 
-      p_z_given_w1 = compute_p_z_given_w(w1, map2embeddings(context_embeddings, c1_idx_arr)) 
-      p_z_given_w2 = compute_p_z_given_w(w2, map2embeddings(context_embeddings, c2_idx_arr))
-      sim = expected_sim2(w1,w2,p_z_given_w1,p_z_given_w2) 
-      
+    sim = sim_func(embeddings, context_embeddings, w1_idx, w2_idx, c1_idx_arr, c2_idx_arr, sparsity, dim_penalty)
     print vocab[w1_idx], vocab[w2_idx], sim
     iw2v_sims.append(sim)    
 
@@ -143,32 +161,32 @@ def eval_scws(vocab, embeddings, context_embeddings, scws, arg_hash):
 
 if __name__ == '__main__':
   ### READ INPUT ARGS
-  use_full_dim = 0
   num_of_args = len(sys.argv)
-  if num_of_args < 2:
-    print "Embedding file not specified...quitting."
+  if num_of_args < 5:
+    print "Usage: embedding_file context_embedding_file sparsity dim_penalty sim_idx "
     exit()
  
   embedding_filename = sys.argv[1]
   context_embedding_filename = sys.argv[2]
+  sparsity = float(sys.argv[3])
+  dim_penalty = float(sys.argv[4])
+
   print("Using embedding file: %s" % (embedding_filename))
+  print("Using context embedding file: %s" % (context_embedding_filename))
+  print("Sparsity: %f" % sparsity)
+  print("Dim Penalty: %f" % dim_penalty)
   vocab, embeddings = read_embedding_file(embedding_filename)
   _, context_embeddings = read_embedding_file(context_embedding_filename)
-  ### Read type of sim to use
-  # 0. Cosine similarity
-  # 1. Dot product similarity ~ using mode z
-  # 2. Expected similarity using dot product
-  arg_hash = {COSINE:False, DOT_PROD:False, EXP_SIM:False}
-  arg = int(sys.argv[3]) 
-  if arg == 0:
-    arg_hash[COSINE] = True 
-  elif arg == 1:
-    arg_hash[DOT_PROD] = True 
-  elif arg == 2:
-    arg_hash[EXP_SIM] = True 
-  print 'arg hash: ', arg_hash
-
+  
+  SIM_FUNCS = [cosine_sim_main, p_z_w_c_sim, p_z_w_sim]
+  idx = int(sys.argv[5]) 
+  if (idx >= 0 and idx <= 2):
+    print "using sim function: ", SIM_FUNCS[idx]
+  else:
+    print "sim idx should be in {0,1,2}"
+    exit()
+  
   scws = read_scws(vocab)
   print("read scws data")
-  corr = eval_scws(vocab, embeddings, context_embeddings, scws, arg_hash)
+  corr = eval_scws(scws, embeddings, context_embeddings, sparsity, dim_penalty, SIM_FUNCS[idx])
   print corr
