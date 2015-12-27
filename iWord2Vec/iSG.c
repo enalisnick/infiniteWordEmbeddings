@@ -404,6 +404,27 @@ void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_g
   }
 }
 
+float compute_p_z_given_w_context(long long word, long long *context, 
+  float *prob_z_given_w_context, int context_size, int curr_z_plus_one) {
+  long long w_idx = word * embed_max_size;
+  float *vals = calloc(context_size * curr_z_plus_one, sizeof(float));
+  for (int i = 0; i < context_size; i++) {
+     long long c_idx = context[i] * embed_max_size;
+     compute_z_dist(vals + i * curr_z_plus_one, w_idx, c_idx, curr_z_plus_one - 1); 
+  }
+
+  float norm = 0.0;
+  for (int i = 0; i < curr_z_plus_one; i++) {
+    float prob = 0.0;
+    for (int j = 0; j < context_size; j++) {
+      prob += vals[j * curr_z_plus_one + i]; 
+    }
+    prob_z_given_w_context[i] = exp_fast(-norm);
+    norm += prob;
+  }
+  return norm;
+}
+
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
 // http://stackoverflow.com/questions/25363450/generating-a-multinomial-distribution
 int sample_from_mult(double probs[], int k, const gsl_rng* r){ // always sample 1 value
@@ -528,6 +549,7 @@ void *TrainModelThread(void *arg) {
   gsl_rng_set (r2, Seed2);
 
   int *z_samples = (int *) calloc(num_z_samples, sizeof(int)); // M-sized array of sampled z values
+  long long *pos_context_store = (long long *) calloc(2*window, sizeof(long long)); // stores positive context 
   long long *context_list = (long long *) calloc(negative + 1, sizeof(long long));
   // terms needed for p(z|w,c)
   float *unnormProbs_z_given_w_c = (float *) calloc(embed_max_size, sizeof(float));
@@ -536,7 +558,7 @@ void *TrainModelThread(void *arg) {
   float *input_gradient_accumulator = (float *) calloc(embed_max_size, sizeof(float)); // stores input (w_i) gradient across z samples
   float *input_gradient = (float *) calloc(embed_max_size, sizeof(float)); // stores the d log p(z | w) / d w gradient
   float *pos_context_gradient = (float *) calloc(embed_max_size, sizeof(float)); // stores positive context gradients across z samples
-
+  
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
@@ -601,18 +623,32 @@ void *TrainModelThread(void *arg) {
     
     next_random = next_random * (unsigned long long)25214903917 + 11;
     b = next_random % window; // Samples(!) window size 
+
+    int pos_context_counter = 0; // size of positive context
+    for (a = b; a < window * 2 + 1; a++) if (a != window) {
+      c = sentence_position - window + a;
+      if (c < 0) continue;
+      if (c >= sentence_length) continue;
+      last_word = sen[c];
+      if (last_word <= 0) continue;
+      pos_context_store[pos_context_counter] = last_word;
+      pos_context_counter++; 
+    }
+ 
+    // Check that we found some positive context words
+    // If not, get a new sentence (ie continue)
+    if (pos_context_counter < 2) {
+      sentence_position++;
+      if (sentence_position >= sentence_length) {
+	sentence_length = 0;
+      }
+      continue;
+    }
  
     // MAIN LOOP THROUGH POSITIVE CONTEXT
     log_prob_per_word = 0.0;
-    int pos_context_counter = 0;
-    for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
-      c = sentence_position - window + a;
-      if (c < 0) continue; 
-      if (c >= sentence_length) break;
-      last_word = sen[c];
-      if (last_word == -1) continue;
-      context_word_position = last_word * embed_max_size;
-      pos_context_counter++;
+    for (a = 0; a < pos_context_counter; a++) {	
+      context_word_position = pos_context_store[a] * embed_max_size;
       
       // lock-in value of embed_current_size for thread since its shared globally                                                    
       int local_embed_size_plus_one = embed_current_size + 1;
@@ -734,6 +770,49 @@ void *TrainModelThread(void *arg) {
       log_prob_per_word += -log_prob_ck_given_w;
       free(prob_c_z_given_w);
     }
+
+    // terms need for p(z|w,context)
+    int local_embed_size_plus_one = embed_current_size + 1; 
+    float *prob_z_given_w_context = (float *) calloc(pos_context_counter, sizeof(float));
+    float normConst_p_z_given_w_context = compute_p_z_given_w_context(input_word_position, pos_context_store, prob_z_given_w_context, pos_context_counter, local_embed_size_plus_one); 
+    
+    for (int z = 0; z < local_embed_size_plus_one; z++) { // sum over z for entropy 
+      // Calculate input gradient for entropy  
+      for (int j = 0; j < local_embed_size_plus_one; j++) { // sum over dimensions for gradient
+        float input_gradient = 0.0;
+        float context_sum = 0.0;
+        for (int c = 0; c < pos_context_counter; c++) {
+          context_word_position = pos_context_store[c] * embed_max_size;
+          float input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
+          context_sum += input_word_E_grad;
+        }
+        for (int i = j; i < local_embed_size_plus_one; i++) {
+          input_gradient += -(prob_z_given_w_context[i]/normConst_p_z_given_w_context) * context_sum; 
+        }
+        if (j <= z) { input_gradient += context_sum; }
+        float entropy_gradient = -(prob_z_given_w_context[z]/normConst_p_z_given_w_context)
+          * ((1.0 + log(prob_z_given_w_context[z]/normConst_p_z_given_w_context)) * input_gradient);
+        input_embed[input_word_position + j] -= alpha_per_dim[j] * entropy_gradient; // TODO: WAIT TO UPDATE?
+      }
+
+      // Calculate positive context gradient for entropy
+      for (int j = 0; j < local_embed_size_plus_one; j++) { // sum over dimensions for gradient
+        float context_gradient = 0.0;
+        for (int c = 0 ; c < pos_context_counter; c++) { 
+          context_word_position = pos_context_store[c] * embed_max_size;        
+          float context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j]; 
+          for (int i = j; i < local_embed_size_plus_one; i++) {
+            context_gradient += -(prob_z_given_w_context[i]/normConst_p_z_given_w_context) 
+             * context_E_grad;
+          }
+          if (j <= z) { context_gradient += context_E_grad; }
+          float entropy_gradient = -(prob_z_given_w_context[z]/normConst_p_z_given_w_context)
+           * ((1.0 + log(prob_z_given_w_context[z]/normConst_p_z_given_w_context)) * context_gradient);
+          context_embed[context_word_position + j] -= alpha_per_dim[z] * entropy_gradient; // TODO: WAIT TO UPDATE?
+        }
+      }
+    } 
+
     // end loop over context (indexed by a)
     train_log_probability += (log_prob_per_word)/(pos_context_counter * num_z_samples);
     sentence_position++; 
