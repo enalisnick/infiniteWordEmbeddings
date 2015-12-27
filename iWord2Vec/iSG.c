@@ -415,12 +415,12 @@ float compute_p_z_given_w_context(long long word, long long *context,
 
   float norm = 0.0;
   for (int i = 0; i < curr_z_plus_one; i++) {
-    float prob = 0.0;
-    for (int j = 0; j < context_size; j++) {
-      prob += vals[j * curr_z_plus_one + i]; 
+    float total_energy = 0.0;
+    for (int c = 0; c < context_size; c++) {
+      total_energy += vals[c * curr_z_plus_one + i]; 
     }
-    prob_z_given_w_context[i] = exp_fast(-norm);
-    norm += prob;
+    prob_z_given_w_context[i] = exp_fast(-total_energy);
+    norm += prob_z_given_w_context[i]; 
   }
   return norm;
 }
@@ -812,6 +812,7 @@ void *TrainModelThread(void *arg) {
         }
       }
     } 
+    free(prob_z_given_w_context);
 
     // end loop over context (indexed by a)
     train_log_probability += (log_prob_per_word)/(pos_context_counter * num_z_samples);
