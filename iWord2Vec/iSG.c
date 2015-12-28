@@ -422,6 +422,8 @@ float compute_p_z_given_w_context(long long word, long long *context,
     prob_z_given_w_context[i] = exp_fast(-total_energy);
     norm += prob_z_given_w_context[i]; 
   }
+
+  free(vals);
   return norm;
 }
 
@@ -773,9 +775,12 @@ void *TrainModelThread(void *arg) {
 
     // terms need for p(z|w,context)
     int local_embed_size_plus_one = embed_current_size + 1; 
-    float *prob_z_given_w_context = (float *) calloc(pos_context_counter, sizeof(float));
-    float normConst_p_z_given_w_context = compute_p_z_given_w_context(input_word_position, pos_context_store, prob_z_given_w_context, pos_context_counter, local_embed_size_plus_one); 
-    
+    float *prob_z_given_w_context = (float *) calloc(local_embed_size_plus_one, sizeof(float));
+    float normConst_p_z_given_w_context = compute_p_z_given_w_context(word, pos_context_store, prob_z_given_w_context, pos_context_counter, local_embed_size_plus_one); 
+    float *entropy_input_gradient = (float *) calloc(local_embed_size_plus_one, sizeof(float));
+    float *entropy_context_gradient = (float *) calloc(pos_context_counter * local_embed_size_plus_one,
+      sizeof(float));   
+ 
     for (int z = 0; z < local_embed_size_plus_one; z++) { // sum over z for entropy 
       // Calculate input gradient for entropy  
       for (int j = 0; j < local_embed_size_plus_one; j++) { // sum over dimensions for gradient
@@ -787,12 +792,14 @@ void *TrainModelThread(void *arg) {
           context_sum += input_word_E_grad;
         }
         for (int i = j; i < local_embed_size_plus_one; i++) {
+          check_value((prob_z_given_w_context[i]/normConst_p_z_given_w_context), "p", i);
           input_gradient += -(prob_z_given_w_context[i]/normConst_p_z_given_w_context) * context_sum; 
         }
         if (j <= z) { input_gradient += context_sum; }
-        float entropy_gradient = -(prob_z_given_w_context[z]/normConst_p_z_given_w_context)
-          * ((1.0 + log(prob_z_given_w_context[z]/normConst_p_z_given_w_context)) * input_gradient);
-        input_embed[input_word_position + j] -= alpha_per_dim[j] * entropy_gradient; // TODO: WAIT TO UPDATE?
+        float entropy_gradient = (prob_z_given_w_context[z]/normConst_p_z_given_w_context)
+          * ((1.0 + log((prob_z_given_w_context[z]/normConst_p_z_given_w_context) + epsilon)) 
+          * input_gradient);
+        entropy_input_gradient[j] += -entropy_gradient; 
       }
 
       // Calculate positive context gradient for entropy
@@ -806,12 +813,26 @@ void *TrainModelThread(void *arg) {
              * context_E_grad;
           }
           if (j <= z) { context_gradient += context_E_grad; }
-          float entropy_gradient = -(prob_z_given_w_context[z]/normConst_p_z_given_w_context)
-           * ((1.0 + log(prob_z_given_w_context[z]/normConst_p_z_given_w_context)) * context_gradient);
-          context_embed[context_word_position + j] -= alpha_per_dim[z] * entropy_gradient; // TODO: WAIT TO UPDATE?
+          float entropy_gradient = (prob_z_given_w_context[z]/normConst_p_z_given_w_context)
+           * ((1.0 + log((prob_z_given_w_context[z]/normConst_p_z_given_w_context) + epsilon)) 
+           * context_gradient);
+          entropy_context_gradient[c * local_embed_size_plus_one + j] += -entropy_gradient; 
         }
       }
-    } 
+    }
+    for (int j = 0; j < local_embed_size_plus_one; j++) {
+      check_value(entropy_input_gradient[j], "entropy_input_gradient", j); 
+      input_embed[input_word_position + j] -= alpha_per_dim[j] * entropy_input_gradient[j]; 
+      for (int c = 0; c < pos_context_counter; c++) {
+        context_word_position = pos_context_store[c] * embed_max_size;
+        check_value(entropy_context_gradient[c * local_embed_size_plus_one + j], "entropy_context_gradient", j); 
+        context_embed[context_word_position + j] -= alpha_per_dim[j] 
+          * entropy_context_gradient[c * local_embed_size_plus_one + j];
+      }
+    }
+  
+    free(entropy_input_gradient);
+    free(entropy_context_gradient);
     free(prob_z_given_w_context);
 
     // end loop over context (indexed by a)
