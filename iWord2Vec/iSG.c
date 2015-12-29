@@ -660,11 +660,11 @@ void *TrainModelThread(void *arg) {
       
       // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                                          
       // we'd like to do this after the last gradient update but local_embed_size_plus_one may have grew, leaving old values 
-      for (c = 0; c < local_embed_size_plus_one; c++) {
-        input_gradient[c] = 0.0;
-        input_gradient_accumulator[c] = 0.0;
-	pos_context_gradient[c] = 0.0;
-	unnormProbs_z_given_w_c[c] = 0.0;
+      for (int j = 0; j < local_embed_size_plus_one; j++) {
+        input_gradient[j] = 0.0;
+        input_gradient_accumulator[j] = 0.0;
+	pos_context_gradient[j] = 0.0;
+	unnormProbs_z_given_w_c[j] = 0.0;
       }
 
       // compute p(z|w,c)
@@ -804,8 +804,8 @@ void *TrainModelThread(void *arg) {
 
       // Calculate positive context gradient for entropy
       for (int j = 0; j < local_embed_size_plus_one; j++) { // sum over dimensions for gradient
-        float context_gradient = 0.0;
         for (int c = 0 ; c < pos_context_counter; c++) { 
+          float context_gradient = 0.0;
           context_word_position = pos_context_store[c] * embed_max_size;        
           float context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j]; 
           for (int i = j; i < local_embed_size_plus_one; i++) {
