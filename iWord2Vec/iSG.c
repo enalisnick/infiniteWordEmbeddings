@@ -415,11 +415,11 @@ float compute_p_z_given_w_context(long long word, long long *context,
 
   float norm = 0.0;
   for (int i = 0; i < curr_z_plus_one; i++) {
-    float total_energy = 0.0;
+    float total_energy = 1.0;
     for (int c = 0; c < context_size; c++) {
-      total_energy += vals[c * curr_z_plus_one + i]; 
+      total_energy *= vals[c * curr_z_plus_one + i]; 
     }
-    prob_z_given_w_context[i] = exp_fast(-total_energy);
+    prob_z_given_w_context[i] = total_energy;
     norm += prob_z_given_w_context[i]; 
   }
 
