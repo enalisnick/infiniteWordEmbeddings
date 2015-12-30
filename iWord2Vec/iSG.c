@@ -404,6 +404,10 @@ void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_g
   }
 }
 
+/* 
+  Computes p_z_w_given_context and computes running sum which 
+  is useful in entropy gradient
+*/
 void compute_p_z_given_w_context(long long word, long long *context, 
   float *prob_z_given_w_context, float *prob_z_given_w_context_sum, 
   int context_size, int curr_z_plus_one) {
@@ -491,6 +495,7 @@ void check_value(float val, char *name, int idx) {
     printf("idx: %d, name=%s, val=%f\n", idx, name, val);
     printf("-------------------------\n");
     fflush(stdout);
+    exit(1);
   }
 }
 
@@ -786,17 +791,24 @@ void *TrainModelThread(void *arg) {
 	  input_gradient_accumulator[j] += temp_p_c_z_given_w * input_word_E_grad;
 	}
       }
- 
+
+      // CALC GRADIENT FOR ENTROPY
+      // Pre-compute context sum
+      float context_sum_arr[local_embed_size_plus_one-1]; 
+      for (int j = 0; j < local_embed_size_plus_one-1; j++) {
+        context_sum_arr[j] = 0.0;
+        for (int v = 0; v < pos_context_counter; v++) {
+          long long context_idx = pos_context_store[v] * embed_max_size;
+	  float input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
+	  context_sum_arr[j] += input_word_E_grad;
+	}
+      }
       for (int z = 0; z < local_embed_size_plus_one; z++) { // sum over z for entropy 
         // Calculate input gradient for entropy  
 	for (int j = 0; j < local_embed_size_plus_one-1; j++) { // sum over dimensions for gradient
 	  float input_gradient = 0.0;
-	  float context_sum = 0.0;
-	  for (int v = 0; v < pos_context_counter; v++) {
-	    long long context_idx = pos_context_store[v] * embed_max_size;
-	    float input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
-	    context_sum += input_word_E_grad;
-	  }
+	  float context_sum = context_sum_arr[j];
+	  
 	  input_gradient += -prob_z_given_w_context_sum[j] * context_sum; 
 	  if (j <= z) { input_gradient += context_sum; }
 	  float entropy_gradient = (prob_z_given_w_context[z])
@@ -916,6 +928,7 @@ void TrainModel() {
   free(alpha_per_dim);
   free(input_embed);
   free(context_embed);
+  
   // Print end time
   now = time (0);                                                               
   strftime(buff, 100, "%Y-%m-%d %H:%M:%S.000", localtime (&now));               
