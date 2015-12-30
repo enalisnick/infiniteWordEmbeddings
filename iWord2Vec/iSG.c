@@ -404,8 +404,10 @@ void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_g
   }
 }
 
-float compute_p_z_given_w_context(long long word, long long *context, 
-  float *prob_z_given_w_context, int context_size, int curr_z_plus_one) {
+void compute_p_z_given_w_context(long long word, long long *context, 
+  float *prob_z_given_w_context, float *prob_z_given_w_context_sum, 
+  int context_size, int curr_z_plus_one) {
+  
   long long w_idx = word * embed_max_size;
   float *vals = calloc(context_size * curr_z_plus_one, sizeof(float));
   for (int i = 0; i < context_size; i++) {
@@ -423,8 +425,17 @@ float compute_p_z_given_w_context(long long word, long long *context,
     norm += prob_z_given_w_context[i]; 
   }
 
+  float sum = 0.0;
+  for (int i = curr_z_plus_one - 1; i >= 0; i--) {
+    // normalize p(z|w,context)
+    prob_z_given_w_context[i] /= norm;
+    
+    // add sum
+    sum += prob_z_given_w_context[i];
+    prob_z_given_w_context_sum[i] = sum;
+  }
+
   free(vals);
-  return norm;
 }
 
 // function to sample value of z_hat -- modified but essentially coppied from StackOverflow 
@@ -489,7 +500,8 @@ void debug_prob(float probs[], int len) {
   for (i = 0; i < len; ++i) {
     printf("z = %i prob: %f\n", i, probs[i]); 
   }
-  printf("*****************\n");	
+  printf("*****************\n");
+  fflush(stdout);	
 }
 
 void print_args() {
@@ -560,7 +572,13 @@ void *TrainModelThread(void *arg) {
   float *input_gradient_accumulator = (float *) calloc(embed_max_size, sizeof(float)); // stores input (w_i) gradient across z samples
   float *input_gradient = (float *) calloc(embed_max_size, sizeof(float)); // stores the d log p(z | w) / d w gradient
   float *pos_context_gradient = (float *) calloc(embed_max_size, sizeof(float)); // stores positive context gradients across z samples
-  
+  // terms need for entropy gradient
+  float *prob_z_given_w_context = (float *) calloc(embed_max_size, sizeof(float));
+  float *prob_z_given_w_context_sum = (float *) calloc(embed_max_size, sizeof(float)); 
+  float *entropy_input_gradient = (float *) calloc(embed_max_size, sizeof(float));
+  float *entropy_context_gradient = (float *) calloc((window*2+1) * embed_max_size, sizeof(float));
+
+ 
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
@@ -658,13 +676,21 @@ void *TrainModelThread(void *arg) {
       // NOTE: intializing here because assumption is each context has local_embed_size_plus_one dims
       float *prob_c_z_given_w = (float *) calloc(local_embed_size_plus_one * (negative + 1), sizeof(float));
       
-      // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                                          
-      // we'd like to do this after the last gradient update but local_embed_size_plus_one may have grew, leaving old values 
+      // only need to initialize dimensions less than current_size + 1 since that's all it can grow  
+      // we'd like to do this after the last gradient update but local_embed_size_plus_one 
+      // may have grew, leaving old values 
       for (int j = 0; j < local_embed_size_plus_one; j++) {
         input_gradient[j] = 0.0;
         input_gradient_accumulator[j] = 0.0;
 	pos_context_gradient[j] = 0.0;
 	unnormProbs_z_given_w_c[j] = 0.0;
+        
+        prob_z_given_w_context[j] = 0.0;
+        prob_z_given_w_context_sum[j] = 0.0;
+        entropy_input_gradient[j] = 0.0;
+        for (int v = 0; v < pos_context_counter; v++) {
+          entropy_context_gradient[v * embed_max_size + j] = 0.0;
+        }
       }
 
       // compute p(z|w,c)
@@ -704,6 +730,10 @@ void *TrainModelThread(void *arg) {
       for (int idx = 0; idx < local_embed_size_plus_one; idx++) log_prob_ck_given_w += prob_c_z_given_w[idx];
       log_prob_ck_given_w = log(log_prob_ck_given_w + epsilon);
 
+      // compute p(z|w,context)
+      compute_p_z_given_w_context(word, pos_context_store, prob_z_given_w_context, 
+        prob_z_given_w_context_sum, pos_context_counter, local_embed_size_plus_one);
+       
       float context_E_grad = 0.0;
       float input_word_E_grad = 0.0;
       // SUM OVER THE SAMPLED Z's
@@ -756,82 +786,66 @@ void *TrainModelThread(void *arg) {
 	  input_gradient_accumulator[j] += temp_p_c_z_given_w * input_word_E_grad;
 	}
       }
+ 
+      for (int z = 0; z < local_embed_size_plus_one; z++) { // sum over z for entropy 
+        // Calculate input gradient for entropy  
+	for (int j = 0; j < local_embed_size_plus_one-1; j++) { // sum over dimensions for gradient
+	  float input_gradient = 0.0;
+	  float context_sum = 0.0;
+	  for (int v = 0; v < pos_context_counter; v++) {
+	    long long context_idx = pos_context_store[v] * embed_max_size;
+	    float input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
+	    context_sum += input_word_E_grad;
+	  }
+	  input_gradient += -prob_z_given_w_context_sum[j] * context_sum; 
+	  if (j <= z) { input_gradient += context_sum; }
+	  float entropy_gradient = (prob_z_given_w_context[z])
+	    * ((1.0 + log((prob_z_given_w_context[z]) + epsilon)) 
+	    * input_gradient);
+	  entropy_input_gradient[j] += -entropy_gradient; 
+	}
 
-      // MAKE FINAL GRAD UPDATES
+	// Calculate positive context gradient for entropy
+	for (int j = 0; j < local_embed_size_plus_one-1; j++) { // sum over dimensions for gradient
+	  for (int v = 0 ; v < pos_context_counter; v++) { 
+	    float context_gradient = 0.0;
+            long long context_idx = pos_context_store[v] * embed_max_size;        
+	    float context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_idx + j]; 
+	    context_gradient += -prob_z_given_w_context_sum[j] * context_E_grad;
+	    if (j <= z) { context_gradient += context_E_grad; }
+	    float entropy_gradient = (prob_z_given_w_context[z])
+	     * ((1.0 + log((prob_z_given_w_context[z]) + epsilon)) 
+	     * context_gradient);
+	    entropy_context_gradient[v * embed_max_size + j] += -entropy_gradient; 
+	  }
+	}
+      }
+
+      // MAKE FINAL GRAD UPDATES (includes entropy)
       for (int j = 0; j < loop_bound; j++){
 	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += input_gradient_accumulator[j]; 
-	input_embed[input_word_position + j] -= alpha_per_dim[j] * input_gradient[j];
-	check_value(pos_context_gradient[j], "pos_context_gradient", j);
-        context_embed[context_word_position + j] -= alpha_per_dim[j] * pos_context_gradient[j];
+        input_embed[input_word_position + j] -= alpha_per_dim[j] * 
+          (input_gradient[j] + entropy_input_gradient[j]);
+        for (int v = 0; v < pos_context_counter; v++) {
+          long long context_idx = pos_context_store[v] * embed_max_size; 
+          if (v == a) {
+	    check_value(pos_context_gradient[j], "pos_context_gradient", j);
+            context_embed[context_idx + j] -= alpha_per_dim[j] 
+              * (pos_context_gradient[j] + entropy_context_gradient[v * embed_max_size + j]);
+          }
+          else {
+           context_embed[context_idx + j] -= alpha_per_dim[j]
+             * entropy_context_gradient[v * embed_max_size + j];
+          }
+        }
       }
 
       // track training progress
       log_prob_per_word += -log_prob_ck_given_w;
-      free(prob_c_z_given_w);
+      free(prob_c_z_given_w);      
     }
-
-    // terms need for p(z|w,context)
-    int local_embed_size_plus_one = embed_current_size + 1; 
-    float *prob_z_given_w_context = (float *) calloc(local_embed_size_plus_one, sizeof(float));
-    float normConst_p_z_given_w_context = compute_p_z_given_w_context(word, pos_context_store, prob_z_given_w_context, pos_context_counter, local_embed_size_plus_one); 
-    float *entropy_input_gradient = (float *) calloc(local_embed_size_plus_one, sizeof(float));
-    float *entropy_context_gradient = (float *) calloc(pos_context_counter * local_embed_size_plus_one,
-      sizeof(float));   
- 
-    for (int z = 0; z < local_embed_size_plus_one; z++) { // sum over z for entropy 
-      // Calculate input gradient for entropy  
-      for (int j = 0; j < local_embed_size_plus_one; j++) { // sum over dimensions for gradient
-        float input_gradient = 0.0;
-        float context_sum = 0.0;
-        for (int c = 0; c < pos_context_counter; c++) {
-          context_word_position = pos_context_store[c] * embed_max_size;
-          float input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
-          context_sum += input_word_E_grad;
-        }
-        for (int i = j; i < local_embed_size_plus_one; i++) {
-          check_value((prob_z_given_w_context[i]/normConst_p_z_given_w_context), "p", i);
-          input_gradient += -(prob_z_given_w_context[i]/normConst_p_z_given_w_context) * context_sum; 
-        }
-        if (j <= z) { input_gradient += context_sum; }
-        float entropy_gradient = (prob_z_given_w_context[z]/normConst_p_z_given_w_context)
-          * ((1.0 + log((prob_z_given_w_context[z]/normConst_p_z_given_w_context) + epsilon)) 
-          * input_gradient);
-        entropy_input_gradient[j] += -entropy_gradient; 
-      }
-
-      // Calculate positive context gradient for entropy
-      for (int j = 0; j < local_embed_size_plus_one; j++) { // sum over dimensions for gradient
-        for (int c = 0 ; c < pos_context_counter; c++) { 
-          float context_gradient = 0.0;
-          context_word_position = pos_context_store[c] * embed_max_size;        
-          float context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j]; 
-          for (int i = j; i < local_embed_size_plus_one; i++) {
-            context_gradient += -(prob_z_given_w_context[i]/normConst_p_z_given_w_context) 
-             * context_E_grad;
-          }
-          if (j <= z) { context_gradient += context_E_grad; }
-          float entropy_gradient = (prob_z_given_w_context[z]/normConst_p_z_given_w_context)
-           * ((1.0 + log((prob_z_given_w_context[z]/normConst_p_z_given_w_context) + epsilon)) 
-           * context_gradient);
-          entropy_context_gradient[c * local_embed_size_plus_one + j] += -entropy_gradient; 
-        }
-      }
-    }
-    for (int j = 0; j < local_embed_size_plus_one; j++) {
-      check_value(entropy_input_gradient[j], "entropy_input_gradient", j); 
-      input_embed[input_word_position + j] -= alpha_per_dim[j] * entropy_input_gradient[j]; 
-      for (int c = 0; c < pos_context_counter; c++) {
-        context_word_position = pos_context_store[c] * embed_max_size;
-        check_value(entropy_context_gradient[c * local_embed_size_plus_one + j], "entropy_context_gradient", j); 
-        context_embed[context_word_position + j] -= alpha_per_dim[j] 
-          * entropy_context_gradient[c * local_embed_size_plus_one + j];
-      }
-    }
-  
-    free(entropy_input_gradient);
-    free(entropy_context_gradient);
-    free(prob_z_given_w_context);
+     
 
     // end loop over context (indexed by a)
     train_log_probability += (log_prob_per_word)/(pos_context_counter * num_z_samples);
@@ -849,7 +863,11 @@ void *TrainModelThread(void *arg) {
   free(input_gradient);
   free(input_gradient_accumulator);
   free(pos_context_gradient);
-  
+  free(prob_z_given_w_context);
+  free(prob_z_given_w_context_sum);
+  free(entropy_input_gradient);
+  free(entropy_context_gradient);
+ 
   pthread_exit(NULL);
 }
 
@@ -898,7 +916,6 @@ void TrainModel() {
   free(alpha_per_dim);
   free(input_embed);
   free(context_embed);
- 
   // Print end time
   now = time (0);                                                               
   strftime(buff, 100, "%Y-%m-%d %H:%M:%S.000", localtime (&now));               
