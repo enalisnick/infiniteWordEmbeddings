@@ -581,7 +581,7 @@ void *TrainModelThread(void *arg) {
   float *prob_z_given_w_context = (float *) calloc(embed_max_size, sizeof(float));
   float *prob_z_given_w_context_sum = (float *) calloc(embed_max_size, sizeof(float)); 
   float *entropy_input_gradient = (float *) calloc(embed_max_size, sizeof(float));
-  float *entropy_context_gradient = (float *) calloc((window*2+1) * embed_max_size, sizeof(float));
+  float *entropy_context_gradient = (float *) calloc((2*window) * embed_max_size, sizeof(float));
 
  
   float train_log_probability = 0.0;  // track if model is learning 
@@ -835,12 +835,13 @@ void *TrainModelThread(void *arg) {
 
       // MAKE FINAL GRAD UPDATES (includes entropy)
       for (int j = 0; j < loop_bound; j++){
-	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += input_gradient_accumulator[j]; 
+        check_value(entropy_input_gradient[j], "entropy_input_gradient", j);
         input_embed[input_word_position + j] -= alpha_per_dim[j] * 
           (input_gradient[j] + entropy_input_gradient[j]);
         for (int v = 0; v < pos_context_counter; v++) {
           long long context_idx = pos_context_store[v] * embed_max_size; 
+          check_value(entropy_context_gradient[j], "entropy_context_gradient", j);
           if (v == a) {
 	    check_value(pos_context_gradient[j], "pos_context_gradient", j);
             context_embed[context_idx + j] -= alpha_per_dim[j] 
@@ -872,6 +873,7 @@ void *TrainModelThread(void *arg) {
   free(z_samples);   
   free(unnormProbs_z_given_w_c); 
   free(context_list); 
+  free(pos_context_store);
   free(input_gradient);
   free(input_gradient_accumulator);
   free(pos_context_gradient);
