@@ -630,7 +630,7 @@ void *TrainModelThread(void *arg) {
       continue;
     }
 
-    float window_normalization = 1/(pos_countex_counter-1.0);
+    float window_normalization = 1/(pos_context_counter-1.0);
  
     // MAIN LOOP THROUGH POSITIVE CONTEXT
     log_prob_per_word = 0.0;
