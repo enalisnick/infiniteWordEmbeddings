@@ -12,6 +12,9 @@ iW2V_mod : iW2V_mod.c
 iSG : iSG.c
 	$(CC) iSG.c -o iSG $(CFLAGS)
 
+iCBOW : iCBOW.c
+	$(CC) iCBOW.c -o iCBOW $(CFLAGS)
+
 find_nearest_neighbors: Evaluation/find_nearest_neighbors.c
 	$(CC) Evaluation/find_nearest_neighbors.c -o Evaluation/find_nearest_neighbors $(CFLAGS)
 
@@ -25,4 +28,4 @@ W2V_test_log_prob: Evaluation/W2V_test_log_prob.c
 	$(CC) Evaluation/W2V_test_log_prob.c -o Evaluation/W2V_test_log_prob $(CFLAGS)
 
 clean:
-	rm -rf iW2V_mod iW2V_mod.dSYM iSG iSG.dSYM *~ Evaluation/find_nearest_neighbors Evaluation/wordsim353_eval Evaluation/W2V_test_log_prob
+	rm -rf iW2V_mod iW2V_mod.dSYM iSG iSG.dSYM iCBOW iCBOW.dSYM *~ Evaluation/find_nearest_neighbors Evaluation/wordsim353_eval Evaluation/W2V_test_log_prob
