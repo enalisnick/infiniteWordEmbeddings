@@ -365,9 +365,17 @@ float compute_energy(long long w_idx, long long c_idx, int z){
   -> c_idx: context index
   -> curr_z: current number of dimensions 
 */
-float compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) { 
+// (unnormProbs_z_given_w_C, pos_context_store, a, pos_context_counter, local_embed_size_plus_one - 1)
+float compute_z_dist(float *dist, long long *context, int center_idx, int context_size, int curr_z) { 
   float norm = 0.0;
+  long long w_idx = context[a] * max_embed_size;
   for (int a = 0; a < curr_z; a++) {
+    float context_sum = 0;
+    float context_norms = 0;
+    for (int j = 0; j < context_size; j++){
+      if (j == a
+      context_sum += context_embed[]
+    }
     float val = -input_embed[w_idx + a]*context_embed[c_idx + a] 
                 +log_dim_penalty + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
                 +sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
