@@ -368,14 +368,14 @@ float compute_energy(long long w_idx, long long c_idx, int z){
 // (unnormProbs_z_given_w_C, pos_context_store, a, pos_context_counter, local_embed_size_plus_one - 1)
 float compute_z_dist(float *dist, long long *context, int center_idx, int context_size, int curr_z) { 
   float norm = 0.0;
-  long long w_idx = context[center_idx] * max_embed_size;
+  long long w_idx = context[center_idx] * embed_max_size;
   for (int a = 0; a < curr_z; a++) {
     // precompute context values
     float context_sum = 0;
     float context_norms = 0;
     for (int j = 0; j < context_size; j++){
       if (j == a) continue;
-      long long c_idx = context[j] * max_embed_size;
+      long long c_idx = context[j] * embed_max_size;
       context_sum += context_embed[c_idx + a];
       context_norms += context_embed[c_idx + a] * context_embed[c_idx + a];
     }
@@ -410,9 +410,9 @@ void compute_p_w_z_given_C(long long center_idx, long long *context, long long *
   // z_dist_list should now have the prob. of each dim for every context word 
   
   // compute prob
-  for (int s = 0; s < negatives+1; s++) {
+  for (int s = 0; s < negative_size + 1; s++) {
     for (int z = 0; z < curr_z_plus_one; z++) {
-      prob_w_z_given_C[s * curr_z_plus_one + z] = prob_c_z_given_w[s * curr_z_plus_one + z]/norm;
+      prob_w_z_given_C[s * curr_z_plus_one + z] = prob_w_z_given_C[s * curr_z_plus_one + z]/norm;
     }
   }
 }
@@ -519,8 +519,8 @@ void *TrainModelThread(void *arg) {
   ThreadArg *thread_arg = (ThreadArg *)arg;
   int id = thread_arg->id;
 
-  long long a, b, d, center_word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
-  long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
+  long long a, b, d, word, center_word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
+  long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], pos_context_counter;
   long long center_word_position, context_word_position, neg_center_word_position, z_max, c, local_iter = iter;
   float log_prob_per_word = 0;
   unsigned long long next_random = (long long)id;
@@ -542,6 +542,7 @@ void *TrainModelThread(void *arg) {
 
   int *z_samples = (int *) calloc(num_z_samples, sizeof(int)); // M-sized array of sampled z values
   long long *negative_list = (long long *) calloc(negative, sizeof(long long));
+  long long *pos_context_store = (long long *) calloc(2*window, sizeof(long long));
   // terms needed for p(z|w,C)
   float *unnormProbs_z_given_w_C = (float *) calloc(embed_max_size, sizeof(float));
   float normConst_z_given_w_C = 0.0;
@@ -759,7 +760,7 @@ void *TrainModelThread(void *arg) {
 
       // MAKE FINAL GRAD UPDATES
       for (int j = 0; j < loop_bound; j++){
-	for (ink k = 0; k < pos_context_counter; k++){
+	for (int k = 0; k < pos_context_counter; k++){
 	  context_word_position = pos_context_store[k] * embed_max_size;
 	  check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j);
 	  if (k == a){
