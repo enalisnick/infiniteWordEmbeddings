@@ -389,7 +389,7 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
     dist[a] = exp_fast((1/(context_size - 1.0)) * -dist[a]);
     norm += dist[a];
   }
-  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-dist[curr_z]);
+  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast((1/(context_size - 1.0)) * -dist[curr_z]);
   norm += dist[curr_z];
 
   return norm;
