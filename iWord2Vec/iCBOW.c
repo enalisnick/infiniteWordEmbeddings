@@ -673,7 +673,7 @@ void *TrainModelThread(void *arg) {
 	next_random = next_random * (unsigned long long)25214903917 + 11;
 	negative_word = table[(next_random >> 16) % table_size];
 	if (negative_word == 0) negative_word = next_random % (vocab_size - 1) + 1;
-	if (negative_word == word || negative_word <= 0) continue; 
+	if (negative_word == center_word || negative_word <= 0) continue; 
 	negative_list[d] = negative_word;
         d--;
       }
