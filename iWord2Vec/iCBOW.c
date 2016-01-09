@@ -381,12 +381,12 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
     }
     // compute entergy
     float val = -input_embed[w_idx + a]*context_sum 
-                +context_size*log_dim_penalty + context_size*sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
+      +(context_size-1)*log_dim_penalty + (context_size-1)*sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
                 +sparsity_weight*context_norms;
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
-    dist[a] = exp_fast(-dist[a]);
+    dist[a] = exp_fast((1/(context_size - 1.0)) * -dist[a]);
     norm += dist[a];
   }
   dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-dist[curr_z]);
@@ -406,6 +406,7 @@ void compute_p_w_z_given_C(long long center_idx, long long *context, long long *
     context[center_idx] = negatives[s];
     norm += compute_z_dist(prob_w_z_given_C + (s+1) * curr_z_plus_one, context, center_idx, context_size, curr_z_plus_one - 1); 
   }
+  // replace true center word
   context[center_idx] = save_true_w;
   // z_dist_list should now have the prob. of each dim for every context word 
   
@@ -628,6 +629,8 @@ void *TrainModelThread(void *arg) {
       }
       continue;
     }
+
+    float window_normalization = 1/(pos_countex_counter-1.0);
  
     // MAIN LOOP THROUGH POSITIVE CONTEXT
     log_prob_per_word = 0.0;
@@ -697,8 +700,8 @@ void *TrainModelThread(void *arg) {
 	  for (int j = 0; j < z_samples[m]; j++){
 	    context_E_grad = input_embed[center_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
 	    center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
-	    gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * context_E_grad;
-	    gradient[a*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * center_word_E_grad;
+	    gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
+	    gradient[a*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
 	  }
 	}
       }
@@ -720,8 +723,8 @@ void *TrainModelThread(void *arg) {
 	  for (int i = j; i < local_embed_size_plus_one; i++){
 	    temp_p_z_given_w_C += unnormProbs_z_given_w_C[i]/normConst_z_given_w_C;
 	  }
-	  gradient[k*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * temp_p_z_given_w_C * context_E_grad;
-	  gradient[a*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * temp_p_z_given_w_C * center_word_E_grad;
+	  gradient[k*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * temp_p_z_given_w_C * window_normalization * context_E_grad;
+	  gradient[a*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * temp_p_z_given_w_C * window_normalization * center_word_E_grad;
 	}
       }
 
@@ -739,10 +742,10 @@ void *TrainModelThread(void *arg) {
 	    for (int i = j; i < local_embed_size_plus_one; i++){
 	      temp_p_w_z_given_C += prob_w_z_given_C[(d+1)*local_embed_size_plus_one + i];
 	    }
-	    gradient[k*local_embed_size_plus_one + j] += temp_p_w_z_given_C * context_E_grad;
+	    gradient[k*local_embed_size_plus_one + j] += temp_p_w_z_given_C * window_normalization * context_E_grad;
 	    // update negative example since this is all we need
 	    check_value((temp_p_w_z_given_C * neg_center_word_E_grad), "neg center word gradient", j);
-	    input_embed[neg_center_word_position + j] -= alpha_per_dim[j] * (temp_p_w_z_given_C * neg_center_word_E_grad);
+	    input_embed[neg_center_word_position + j] -= alpha_per_dim[j] * (temp_p_w_z_given_C * window_normalization * neg_center_word_E_grad);
 	  }
 	  // add subgradient for postive center word
 	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
@@ -752,9 +755,9 @@ void *TrainModelThread(void *arg) {
 	    temp_p_w_z_given_C += prob_w_z_given_C[i];
 	  }
 	  // add to pos context gradient                                                                                                                                                  
-	  gradient[k*local_embed_size_plus_one + j] += temp_p_w_z_given_C * context_E_grad;
+	  gradient[k*local_embed_size_plus_one + j] += temp_p_w_z_given_C * window_normalization * context_E_grad;
 	  // add to center word grad
-	  gradient[a*local_embed_size_plus_one + j] += temp_p_w_z_given_C * center_word_E_grad;
+	  gradient[a*local_embed_size_plus_one + j] += temp_p_w_z_given_C * window_normalization * center_word_E_grad;
 	}
       }
 
