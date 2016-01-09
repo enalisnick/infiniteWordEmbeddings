@@ -543,7 +543,7 @@ void *TrainModelThread(void *arg) {
 
   int *z_samples = (int *) calloc(num_z_samples, sizeof(int)); // M-sized array of sampled z values
   long long *negative_list = (long long *) calloc(negative, sizeof(long long));
-  long long *pos_context_store = (long long *) calloc(2*window, sizeof(long long));
+  long long *pos_context_store = (long long *) calloc(2*window+1, sizeof(long long));
   // terms needed for p(z|w,C)
   float *unnormProbs_z_given_w_C = (float *) calloc(embed_max_size, sizeof(float));
   float normConst_z_given_w_C = 0.0;
