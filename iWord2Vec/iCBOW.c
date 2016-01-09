@@ -368,17 +368,21 @@ float compute_energy(long long w_idx, long long c_idx, int z){
 // (unnormProbs_z_given_w_C, pos_context_store, a, pos_context_counter, local_embed_size_plus_one - 1)
 float compute_z_dist(float *dist, long long *context, int center_idx, int context_size, int curr_z) { 
   float norm = 0.0;
-  long long w_idx = context[a] * max_embed_size;
+  long long w_idx = context[center_idx] * max_embed_size;
   for (int a = 0; a < curr_z; a++) {
+    // precompute context values
     float context_sum = 0;
     float context_norms = 0;
     for (int j = 0; j < context_size; j++){
-      if (j == a
-      context_sum += context_embed[]
+      if (j == a) continue;
+      long long c_idx = context[j] * max_embed_size;
+      context_sum += context_embed[c_idx + a];
+      context_norms += context_embed[c_idx + a] * context_embed[c_idx + a];
     }
-    float val = -input_embed[w_idx + a]*context_embed[c_idx + a] 
-                +log_dim_penalty + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
-                +sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
+    // compute entergy
+    float val = -input_embed[w_idx + a]*context_sum 
+                +context_size*log_dim_penalty + context_size*sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
+                +sparsity_weight*context_norms;
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
@@ -392,22 +396,23 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
 }
 
 // prob_c_z_given_w should be of size true_context_size * curr_z_plus_one
-void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_given_w, 
-  int context_size, int curr_z_plus_one) {
+//(a, pos_context_store, negative_list, pos_context_counter, negative, prob_w_z_given_C, local_embed_size_plus_one)
+void compute_p_w_z_given_C(long long center_idx, long long *context, long long *negatives, int context_size, int negative_size, float *prob_w_z_given_C, int curr_z_plus_one) {
   // compute e^(-E(w,c,z)) for z = 1,...,curr_z,curr_z+1 for every context c
-  long long w_idx = word * embed_max_size;
+  long long save_true_w = context[center_idx];
   float norm = 0.0;
-  for (int s = 0; s < context_size; s++) {
-    long long c_idx = context[s] * embed_max_size;  
-    norm += compute_z_dist(prob_c_z_given_w + s * curr_z_plus_one, w_idx, c_idx, curr_z_plus_one - 1); 
+  norm += compute_z_dist(prob_w_z_given_C, context, center_idx, context_size, curr_z_plus_one - 1);
+  for (int s = 0; s < negative_size; s++) {
+    context[center_idx] = negatives[s];
+    norm += compute_z_dist(prob_w_z_given_C + (s+1) * curr_z_plus_one, context, center_idx, context_size, curr_z_plus_one - 1); 
   }
+  context[center_idx] = save_true_w;
   // z_dist_list should now have the prob. of each dim for every context word 
   
   // compute prob
-  for (int s = 0; s < context_size; s++) {
-    //long long c_idx = context[s] * embed_max_size;
+  for (int s = 0; s < negatives+1; s++) {
     for (int z = 0; z < curr_z_plus_one; z++) {
-      prob_c_z_given_w[s * curr_z_plus_one + z] = prob_c_z_given_w[s * curr_z_plus_one + z]/norm;
+      prob_w_z_given_C[s * curr_z_plus_one + z] = prob_c_z_given_w[s * curr_z_plus_one + z]/norm;
     }
   }
 }
