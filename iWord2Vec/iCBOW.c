@@ -374,7 +374,7 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
     float context_sum = 0;
     float context_norms = 0;
     for (int j = 0; j < context_size; j++){
-      if (j == a) continue;
+      if (j == center_idx) continue;
       long long c_idx = context[j] * embed_max_size;
       context_sum += context_embed[c_idx + a];
       context_norms += context_embed[c_idx + a] * context_embed[c_idx + a];
