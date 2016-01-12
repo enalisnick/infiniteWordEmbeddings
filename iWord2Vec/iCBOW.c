@@ -386,10 +386,10 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
-    dist[a] = exp_fast((1/(context_size - 1.0)) * -dist[a]);
+    dist[a] = exp_fast((1.0/(context_size - 1.0)) * -dist[a]);
     norm += dist[a];
   }
-  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast((1/(context_size - 1.0)) * -dist[curr_z]);
+  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast((1.0/(context_size - 1.0)) * -dist[curr_z]);
   norm += dist[curr_z];
 
   return norm;
@@ -643,7 +643,7 @@ void *TrainModelThread(void *arg) {
       continue;
     }
 
-    float window_normalization = 1/(pos_context_counter-1.0);
+    float window_normalization = 1.0/(pos_context_counter-1.0);
  
     // MAIN LOOP THROUGH POSITIVE CONTEXT
     log_prob_per_word = 0.0;
