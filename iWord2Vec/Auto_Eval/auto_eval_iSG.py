@@ -88,7 +88,34 @@ def perform_word_sim_task(vocab, input_embeddings, context_embeddings, sparsity,
     model_sims.append(temp_sum)
   outF.write("Spearman's Rank Correlation: %.4f \n\n" %(compute_spearman_rank(human_sims, model_sims)))
   outF.flush()
+
+# extract input_embedding_file, context_embedding_file, sparsity_penalty, and dim_penalty from files directory
+def process_embeddings_dir(rootDir):
+    print 'reading rootDir: ', rootDir
+    arr = [] 
+    # get the various parameter settings
+    files = [ f for f in listdir(rootDir) if isfile(join(rootDir,f)) ]
+    roots = []
     
+    iSG = 'iSG_'
+    iCBOW = 'iCBOW_'
+    for file in files:
+      file = file.lower()
+      if iSG.lower() in file:  
+        roots.append((iSG, file.split('_vecs_')[1].split('.txt')[0]))
+      if iCBOW.lower() in file:
+        roots.append((iCBOW, file.split('_vecs_')[1].split('.txt')[0])) 
+    roots = set(roots)
+    for prefix,root in roots:
+        sparsity = float(root.split('_')[0])
+        dim_penalty = float(root.split('_')[1])
+        
+        input_embedding_file = prefix + "w_vecs_"+root+".txt"
+        context_embedding_file = prefix + "c_vecs_"+root+".txt"
+        arr.append((rootDir+input_embedding_file, rootDir+context_embedding_file, sparsity, dim_penalty)) 
+
+    return arr
+
 ##### MAIN #####
 if __name__ == '__main__': 
     k = 25000 # truncate the vocabulary to the top k most frequent words
@@ -117,21 +144,9 @@ if __name__ == '__main__':
 
     outF = open(outputFile,"w")
     outF.write("Evaluating embedding files in directory: %s \n\n" %(rootDir))
-
-    # get the various parameter settings
-    files = [ f for f in listdir(rootDir) if isfile(join(rootDir,f)) ]
-    roots = []
-    for file in files:
-      if '_1.075_' in file: # add contraints here if only want to eval a subset of files 
-        roots.append(file.split('_vecs_')[1].split('.txt')[0])
-    roots = set(roots)
-    for root in roots:
-        sparsity = float(root.split('_')[0])
-        dim_penalty = float(root.split('_')[1])
-    
-        input_embedding_file = "iSG_w_vecs_"+root+".txt"
-        context_embedding_file = "iSG_c_vecs_"+root+".txt"
-
+ 
+    arr = process_embeddings_dir(rootDir) 
+    for input_embedding_file,context_embedding_file,sparsity,dim_penalty in arr: 
         outF.write('#####################################################\n')
         outF.write('Input embeddings file: %s \n' %(input_embedding_file))
         outF.write('Context embeddings file: %s \n' %(context_embedding_file))

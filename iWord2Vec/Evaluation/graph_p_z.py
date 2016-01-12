@@ -10,6 +10,7 @@ import sys, getopt
 # Our libraries
 from Evaluation.eval_lib import read_embedding_file
 from Evaluation.eval_lib import get_nn
+from Auto_Eval.auto_eval_iSG import process_embeddings_dir 
 
 def compute_unnorm_z_probs_recursively(in_vec, out_vec, max_dim, sparsity_weight, dim_penalty):
     z_probs = np.zeros(max_dim)
@@ -58,7 +59,7 @@ def plot(in_vocab_all, in_embeddings_all, in_vocab, in_embeddings, out_vocab,
             p_z_w = compute_p_z_given_w(word_in_embedding, sentence_embeddings, sparsity, dim_penalty)
         else:
             p_z_w = compute_p_z_given_w(word_in_embedding, out_embeddings, sparsity, dim_penalty)
-
+  
         # find nearest neighbors at the modes
         sorted_prob_idx = np.argsort(-1*p_z_w) # negative one so the sort is descending
         nns_at_modes = []
@@ -105,7 +106,7 @@ if __name__ == '__main__':
     k = 15000 # truncate the vocabulary to the top k most frequent words
     sparsity = 0.0
     dim_penalty = 0.0
-    help_message = 'graph_p_z.py -i <input embeddings file> -c <context embeddings file> -w <comma separated list of words to plot> -s <optional comma separated list of words to marginalize over>'
+    help_message = 'graph_p_z.py -r <path to directory containing embedding files> -w <comma separated list of words to plot> -s <optional comma separated list of words to marginalize over>'
 
     # read in command line arguments
     input_embedding_file = ""
@@ -119,7 +120,7 @@ if __name__ == '__main__':
    
     # get args
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:c:w:s:n:",["ifile=","cfile=","words=","sentence=","filename="])
+        opts, args = getopt.getopt(sys.argv[1:],"hr:c:w:s:n:",["rootDir=","words=","sentence=","filename="])
     except getopt.GetoptError:
         print help_message
         sys.exit(2)
@@ -127,10 +128,8 @@ if __name__ == '__main__':
         if opt == '-h':
             print help_message
             sys.exit()
-        elif opt in ("-i", "--ifile"):
-            input_embedding_file = arg
-        elif opt in ("-c", "--cfile"):
-            context_embedding_file = arg
+        elif opt in ("-r", "--rootDir"):
+            rootDir = arg 
         elif opt in ("-w", "--words"):
             words_to_plot = arg.split(',')
         elif opt in ("-s", "--sentence"):
@@ -139,38 +138,33 @@ if __name__ == '__main__':
             filename = arg
  
     # extract dim and sparsity penalties from file names
-    try:
-      sparsity = float(input_embedding_file.split('/')[-1].split('_')[3])
-      dim_penalty = float(input_embedding_file.split('/')[-1].split('_')[4])
-    except ValueError:
-      sparsity = 0.001
-      dim_penalty = 1.1 
-
-    print 'Input embeddings file: ', input_embedding_file
-    print 'Context embeddings file: ', context_embedding_file
-    print 'words_to_plot: ', ", ".join(words_to_plot)
-    print 'sentence to marginalize over: ', " ".join(sentence_to_marginalize_over)
-    print 'sparsity penalty: ', str(sparsity)
-    print 'dimension penalty: ', str(dim_penalty)
+    arr = process_embeddings_dir(rootDir) 
+    for input_embedding_file,context_embedding_file,sparsity,dim_penalty in arr:
+	print 'Input embeddings file: ', input_embedding_file
+	print 'Context embeddings file: ', context_embedding_file
+	print 'words_to_plot: ', ", ".join(words_to_plot)
+	print 'sentence to marginalize over: ', " ".join(sentence_to_marginalize_over)
+	print 'sparsity penalty: ', str(sparsity)
+	print 'dimension penalty: ', str(dim_penalty)
 
 
-    print "loading embeddings and vocabulary..."
-    in_vocab_all, in_embeddings_all = read_embedding_file(input_embedding_file)
-    in_vocab = in_vocab_all[:k]
-    in_embeddings = in_embeddings_all[:k]
-    out_vocab_all, out_embeddings_all = read_embedding_file(context_embedding_file)
-    out_vocab = out_vocab_all[:k]
-    out_embeddings = out_embeddings_all[:k]
-    # if a sentence is specified, get embeddings
-    sentence_embeddings = []
-    if len(sentence_to_marginalize_over) > 0:
-        for word in sentence_to_marginalize_over:
-           vocab_idx = -1
-           try: 
-             vocab_idx = out_vocab_all.index(word)
-           except ValueError:
-               pass  
-           sentence_embeddings.append(out_embeddings_all[vocab_idx])
+	print "loading embeddings and vocabulary..."
+	in_vocab_all, in_embeddings_all = read_embedding_file(input_embedding_file)
+	in_vocab = in_vocab_all[:k]
+	in_embeddings = in_embeddings_all[:k]
+	out_vocab_all, out_embeddings_all = read_embedding_file(context_embedding_file)
+	out_vocab = out_vocab_all[:k]
+	out_embeddings = out_embeddings_all[:k]
+	# if a sentence is specified, get embeddings
+	sentence_embeddings = []
+	if len(sentence_to_marginalize_over) > 0:
+	    for word in sentence_to_marginalize_over:
+	       vocab_idx = -1
+	       try: 
+		 vocab_idx = out_vocab_all.index(word)
+	       except ValueError:
+		   pass  
+	       sentence_embeddings.append(out_embeddings_all[vocab_idx])
 
-    plot(in_vocab_all, in_embeddings_all, in_vocab, in_embeddings, out_vocab,
-     out_embeddings, sparsity, dim_penalty, words_to_plot, sentence_embeddings, filename)
+	plot(in_vocab_all, in_embeddings_all, in_vocab, in_embeddings, out_vocab,
+	 out_embeddings, sparsity, dim_penalty, words_to_plot, sentence_embeddings, filename)

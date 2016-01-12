@@ -11,6 +11,7 @@ from tabulate import tabulate
 # Our libraries
 from Evaluation.eval_lib import read_embedding_file
 from Evaluation.eval_lib import get_nn
+from Auto_Eval.auto_eval_iSG import process_embeddings_dir
 
 def compute_unnorm_z_probs_recursively(in_vec, out_vec, max_dim, sparsity_weight, dim_penalty):
     z_probs = np.zeros(max_dim)
@@ -64,7 +65,7 @@ if __name__ == '__main__':
     sentence_to_marginalize_over = []
     # get args
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:c:w:k:s:d:p:",["ifile=","cfile=","words=","numNeighbors","sentence=","dimPenalty=","sparsityPenalty="])
+        opts, args = getopt.getopt(sys.argv[1:],"hr:w:k:s:d:p:",["rootDir=","words=","numNeighbors","sentence="])
     except getopt.GetoptError:
         print help_message
         sys.exit(2)
@@ -72,69 +73,59 @@ if __name__ == '__main__':
         if opt == '-h':
             print help_message
             sys.exit()
-        elif opt in ("-i", "--ifile"):
-            input_embedding_file = arg
-        elif opt in ("-c", "--cfile"):
-            context_embedding_file = arg
+        elif opt in ("-r", "--rootDir"):
+            rootDir = arg  
         elif opt in ("-w", "--words"):
             words_to_plot = arg.split(',')
         elif opt in ("-k", "--numNeighbors"):
             num_of_nns_to_get = int(arg)
         elif opt in ("-s", "--sentence"):
             sentence_to_marginalize_over = arg.split(',')
-        elif opt in ("-d", "--dimPenalty"):
-            dim_penalty = float(arg)
-        elif opt in ("-p", "--sparsityPenalty"):
-            sparsity = float(arg)
+         
+    arr = process_embeddings_dir(rootDir) 
+    for input_embedding_file,context_embedding_file,sparsity,dim_penalty in arr:
+	print 'Input embeddings file: ', input_embedding_file
+        print 'Context embeddings file: ', context_embedding_file
+        print 'words_to_plot: ', ", ".join(words_to_plot)
+        print 'sentence to marginalize over: ', " ".join(sentence_to_marginalize_over)
+        print 'sparsity penalty: ', str(sparsity)
+        print 'dimension penalty: ', str(dim_penalty)
 
-    if sparsity == 0.0 and dim_penalty == 0.0:
-      # extract dim and sparsity penalties from file names
-      sparsity = float(input_embedding_file.split('_')[3])
-      dim_penalty = float(input_embedding_file.split('_')[4])
+	print "loading embeddings and vocabulary..."
+        in_vocab, in_embeddings = read_embedding_file(input_embedding_file)
+	in_vocab = in_vocab[:k]
+	in_embeddings = in_embeddings[:k]
+	out_vocab, out_embeddings = read_embedding_file(context_embedding_file)
+	out_vocab = out_vocab[:k]
+	out_embeddings = out_embeddings[:k]
+	d = len(in_embeddings[0])
+	
+	# if a sentence is specified, get embeddings
+	sentence_embeddings = []
+	if len(sentence_to_marginalize_over) > 0:
+	    for word in sentence_to_marginalize_over:
+		sentence_embeddings.append(out_embeddings[out_vocab.index(word)])
 
-    print 'Input embeddings file: ', input_embedding_file
-    print 'Context embeddings file: ', context_embedding_file
-    print 'words_to_plot: ', ", ".join(words_to_plot)
-    print 'sentence to marginalize over: ', " ".join(sentence_to_marginalize_over)
-    print 'sparsity penalty: ', str(sparsity)
-    print 'dimension penalty: ', str(dim_penalty)
+	for plot_idx, word_to_plot in enumerate(words_to_plot):
 
+	    in_word_idx = in_vocab.index(word_to_plot)
+	    # compute p(z | w)
+	    print "computing p(z | w = %s )" %(word_to_plot)
+	    word_in_embedding = in_embeddings[in_word_idx]
+	    
+	    if len(sentence_to_marginalize_over)>0:
+		p_z_w_c = compute_p_z_given_w_c(word_in_embedding, sentence_embeddings, sparsity, dim_penalty)
+	    else:
+		p_z_w_c = compute_p_z_given_w_c(word_in_embedding, out_embeddings, sparsity, dim_penalty)
 
-    print "loading embeddings and vocabulary..."
-    in_vocab, in_embeddings = read_embedding_file(input_embedding_file)
-    in_vocab = in_vocab[:k]
-    in_embeddings = in_embeddings[:k]
-    out_vocab, out_embeddings = read_embedding_file(context_embedding_file)
-    out_vocab = out_vocab[:k]
-    out_embeddings = out_embeddings[:k]
-    d = len(in_embeddings[0])
-    
-    # if a sentence is specified, get embeddings
-    sentence_embeddings = []
-    if len(sentence_to_marginalize_over) > 0:
-        for word in sentence_to_marginalize_over:
-            sentence_embeddings.append(out_embeddings[out_vocab.index(word)])
-
-    for plot_idx, word_to_plot in enumerate(words_to_plot):
-
-        in_word_idx = in_vocab.index(word_to_plot)
-        # compute p(z | w)
-        print "computing p(z | w = %s )" %(word_to_plot)
-        word_in_embedding = in_embeddings[in_word_idx]
-        
-        if len(sentence_to_marginalize_over)>0:
-            p_z_w_c = compute_p_z_given_w_c(word_in_embedding, sentence_embeddings, sparsity, dim_penalty)
-        else:
-            p_z_w_c = compute_p_z_given_w_c(word_in_embedding, out_embeddings, sparsity, dim_penalty)
-
-        nn_idxs = get_nearest_neighbors(word_in_embedding, in_word_idx, out_embeddings, p_z_w_c, num_of_nns_to_get)
-        
-        t = []
-        for i, idx in enumerate(nn_idxs):
-            t.append([i+1, out_vocab[idx]])
-        # output table                                                                                                                                                                                            
-        print tabulate(t,headers=headers)
-        print
-        print
+	    nn_idxs = get_nearest_neighbors(word_in_embedding, in_word_idx, out_embeddings, p_z_w_c, num_of_nns_to_get)
+	    
+	    t = []
+	    for i, idx in enumerate(nn_idxs):
+		t.append([i+1, out_vocab[idx]])
+	    # output table                                                                                                                                                                                            
+	    print tabulate(t,headers=headers)
+	    print
+	    print
 
 
