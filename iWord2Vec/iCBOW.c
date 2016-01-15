@@ -741,10 +741,10 @@ void *TrainModelThread(void *arg) {
       }
 
       // CALC PREDICTION NORMALIZATION GRADIENT
-      for (int k = 0; k < pos_context_counter; k++){
-	if (k == a) continue;
-	context_word_position = pos_context_store[k] * embed_max_size;
-	for (int j = 0; j < loop_bound; j++){
+      for (int j = 0; j < loop_bound; j++){
+        for (int k = 0; k < pos_context_counter; k++){
+	  if (k == a) continue;
+	  context_word_position = pos_context_store[k] * embed_max_size;
 	  // negative samples subgradient
 	  for (d = 0; d < negative; d++){
 	    neg_center_word_position = negative_list[d] * embed_max_size;
