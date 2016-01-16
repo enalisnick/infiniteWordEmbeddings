@@ -804,6 +804,7 @@ void *TrainModelThread(void *arg) {
   fclose(fi);
   free(z_samples);   
   free(probs_z_given_w_C); 
+  free(pos_context_store);
   free(sum_probs_z_given_w_C);
   free(negative_list); 
   
