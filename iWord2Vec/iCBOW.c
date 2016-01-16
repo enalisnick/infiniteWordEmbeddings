@@ -564,7 +564,7 @@ void *TrainModelThread(void *arg) {
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 1000) { // TODO: lowered for debugging
+    if (word_count - last_word_count > 10000) { // TODO: lowered for debugging
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -660,7 +660,8 @@ void *TrainModelThread(void *arg) {
       float *prob_w_z_given_C = (float *) calloc(local_embed_size_plus_one * (negative + 1), sizeof(float));
       float *sum_prob_w_z_given_C = (float *) calloc(local_embed_size_plus_one * (negative + 1), sizeof(float));
       float *gradient = (float *) calloc(local_embed_size_plus_one * pos_context_counter, sizeof(float));
-      
+      float *neg_gradient = (float *) calloc(local_embed_size_plus_one * negative, sizeof(float));     
+ 
       // only need to initialize dimensions less than current_size + 1 since that's all it can grow                                                          
       // we'd like to do this after the last gradient update but local_embed_size_plus_one may have grew, leaving old values 
       for (c = 0; c < local_embed_size_plus_one; c++) {
@@ -752,10 +753,9 @@ void *TrainModelThread(void *arg) {
 	    neg_center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[neg_center_word_position + j]; 
 	    gradient[k*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] 
               * window_normalization * context_E_grad;
-	    // update negative example since this is all we need
+	    // add to gradient for negative example 
 	    check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j);
-	    input_embed[neg_center_word_position + j] -= alpha_per_dim[j] * 
-              (sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad);
+	    neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
 	  }
 	  // add subgradient for postive center word
 	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
@@ -779,6 +779,10 @@ void *TrainModelThread(void *arg) {
 	    context_embed[context_word_position + j] -= alpha_per_dim[j] * gradient[k*local_embed_size_plus_one + j];
 	  }
 	}
+        for (int d = 0; d < negative; d++) {
+          neg_center_word_position = negative_list[d] * embed_max_size; 
+          input_embed[neg_center_word_position + j] -= alpha_per_dim[j] * neg_gradient[d*local_embed_size_plus_one + j];
+        }
       }
 
       // track training progress
@@ -786,6 +790,7 @@ void *TrainModelThread(void *arg) {
       free(prob_w_z_given_C);
       free(sum_prob_w_z_given_C);
       free(gradient);
+      free(neg_gradient);
     }
     // end loop over context (indexed by a)
     train_log_probability += log_prob_per_word/pos_context_counter;
