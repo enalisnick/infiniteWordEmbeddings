@@ -85,12 +85,12 @@ float exp_fast(float x) {
   float exp_table_val = 0.0;
   if (x_int < -EXP_LEN) {
     exp_table_val = exp_table[0];
-    printf("hit the MIN value in the exp table (-%d)\n", EXP_LEN);
+    printf("value %d under the MIN value in the exp table (-%d)\n", x_int, EXP_LEN);
     fflush(stdout);
   } 
   else if (x_int > EXP_LEN) {
     exp_table_val = exp_table[2*EXP_LEN];
-    printf("hit the MAX value in the exp table (%d)\n", EXP_LEN);
+    printf("value %d over the MAX value in the exp table (%d)\n", x_int, EXP_LEN);
     fflush(stdout);
   }
   else {
