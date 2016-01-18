@@ -45,7 +45,7 @@ const int table_size = 1e8;
 const double epsilon = 1e-8;
 int *table;
 
-const int EXP_LEN = 100;
+const int EXP_LEN = 200;
 float *exp_table; 
 
 // adadelta variables
@@ -85,9 +85,13 @@ float exp_fast(float x) {
   float exp_table_val = 0.0;
   if (x_int < -EXP_LEN) {
     exp_table_val = exp_table[0];
+    printf("hit the MIN value in the exp table (-%d)\n", EXP_LEN);
+    fflush(stdout);
   } 
   else if (x_int > EXP_LEN) {
     exp_table_val = exp_table[2*EXP_LEN];
+    printf("hit the MAX value in the exp table (%d)\n", EXP_LEN);
+    fflush(stdout);
   }
   else {
     exp_table_val = exp_table[x_int + EXP_LEN];
