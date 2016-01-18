@@ -347,17 +347,6 @@ void InitNet() {
   alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
 }
 
-// function to compute E(w, c, z)
-float compute_energy(long long w_idx, long long c_idx, int z){
-  long long a;
-  float energy = 0.0;
-  for (a = 0; a<z; a++) energy += 
-    -input_embed[w_idx + a]*context_embed[c_idx + a] + log_dim_penalty 
-    + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx+a] 
-    + sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
-  return energy;
-}
-
 /*
   Compute e^(-E(w,c,z)) for z=1,...,curr_z,curr_z+1  
   -> dist: float array to fill; should be of size curr_z+1 
