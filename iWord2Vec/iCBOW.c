@@ -557,7 +557,7 @@ void *TrainModelThread(void *arg) {
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 10000) { // TODO: lowered for debugging
+    if (word_count - last_word_count > 500000) { 
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -718,9 +718,9 @@ void *TrainModelThread(void *arg) {
 
       // create variable that adjusts loops according to if dims were expanded 
       int loop_bound = local_embed_size_plus_one - 1;
-      if (z_max == local_embed_size_plus_one){
-	loop_bound = local_embed_size_plus_one;
-      }
+      //if (z_max == local_embed_size_plus_one){
+      //loop_bound = local_embed_size_plus_one;
+      //}
 
       // CALC DIMENSION GRADIENT TERM FOR CONTEXT & CENTER
       for (int k = 0; k < pos_context_counter; k++){
