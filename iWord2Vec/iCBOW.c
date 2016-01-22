@@ -46,7 +46,7 @@ const int table_size = 1e8;
 const double epsilon = 1e-8;
 int *table;
 
-const int EXP_LEN = 100;
+const int EXP_LEN = 200;
 float *exp_table; 
 
 // adadelta variables
@@ -86,9 +86,13 @@ float exp_fast(float x) {
   float exp_table_val = 0.0;
   if (x_int < -EXP_LEN) {
     exp_table_val = exp_table[0];
+    printf("value %d under the MIN value in the exp table (-%d)\n", x_int, EXP_LEN);
+    fflush(stdout);
   } 
   else if (x_int > EXP_LEN) {
     exp_table_val = exp_table[2*EXP_LEN];
+    printf("value %d over the MAX value in the exp table (%d)\n", x_int, EXP_LEN);
+    fflush(stdout);
   }
   else {
     exp_table_val = exp_table[x_int + EXP_LEN];
@@ -348,17 +352,6 @@ void InitNet() {
   alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
 }
 
-// function to compute E(w, c, z)
-float compute_energy(long long w_idx, long long c_idx, int z){
-  long long a;
-  float energy = 0.0;
-  for (a = 0; a<z; a++) energy += 
-    -input_embed[w_idx + a]*context_embed[c_idx + a] + log_dim_penalty 
-    + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx+a] 
-    + sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
-  return energy;
-}
-
 /*
   Compute e^(-E(w,c,z)) for z=1,...,curr_z,curr_z+1  
   -> dist: float array to fill; should be of size curr_z+1 
@@ -565,7 +558,7 @@ void *TrainModelThread(void *arg) {
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 10000) { // TODO: lowered for debugging
+    if (word_count - last_word_count > 500000) { 
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -726,9 +719,9 @@ void *TrainModelThread(void *arg) {
 
       // create variable that adjusts loops according to if dims were expanded 
       int loop_bound = local_embed_size_plus_one - 1;
-      if (z_max == local_embed_size_plus_one){
-	loop_bound = local_embed_size_plus_one;
-      }
+      //if (z_max == local_embed_size_plus_one){
+      //loop_bound = local_embed_size_plus_one;
+      //}
 
       // CALC DIMENSION GRADIENT TERM FOR CONTEXT & CENTER
       for (int k = 0; k < pos_context_counter; k++){
