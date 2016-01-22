@@ -719,9 +719,9 @@ void *TrainModelThread(void *arg) {
 
       // create variable that adjusts loops according to if dims were expanded 
       int loop_bound = local_embed_size_plus_one - 1;
-      //if (z_max == local_embed_size_plus_one){
-      //loop_bound = local_embed_size_plus_one;
-      //}
+      if (z_max == local_embed_size_plus_one){
+	loop_bound = local_embed_size_plus_one;
+      }
 
       // CALC DIMENSION GRADIENT TERM FOR CONTEXT & CENTER
       for (int k = 0; k < pos_context_counter; k++){
