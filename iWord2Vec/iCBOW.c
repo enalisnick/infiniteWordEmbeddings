@@ -24,6 +24,7 @@ struct vocab_word {
 typedef struct {
   int id;
 } ThreadArg;
+ThreadArg *thread_arg;
 
 char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
@@ -835,11 +836,13 @@ void TrainModel() {
  
   // expanded-dim training for desired epochs
   printf("Training expanded dim model for %lld iters \n", iter);
+  
+  thread_arg = malloc(sizeof(ThreadArg) * num_threads);
   for (a = 0; a < num_threads; a++) {
-    ThreadArg arg;
-    arg.id = a;
-    pthread_create(&pt[a], NULL, TrainModelThread, (void *)&arg);
+    thread_arg[a].id = a;
+    pthread_create(&pt[a], NULL, TrainModelThread, &thread_arg[a]);
   }
+
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   printf("Writing input vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
@@ -847,6 +850,7 @@ void TrainModel() {
   if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 
   // free globally used space
+  free(thread_arg);
   free(exp_table);
   if (adadelta_flag == 1){
     free(input_grad_history);
