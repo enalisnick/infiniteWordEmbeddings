@@ -696,7 +696,13 @@ void *TrainModelThread(void *arg) {
       float log_prob_wi_given_C = 0.0;
       // NOTE: since the center word is in the first position of prob_wi_z_given_C[idx], just used the idx
       for (int idx = 0; idx < local_embed_size_plus_one; idx++) log_prob_wi_given_C += prob_w_z_given_C[idx];
-      log_prob_wi_given_C = log(log_prob_wi_given_C + epsilon);
+      if (log_prob_wi_given_C < 0.0000001){
+	printf("WARNING: p(w|C) is very low: %f", log_prob_wi_given_C);
+	fflush(stdout);
+	log_prob_wi_given_C = log(log_prob_wi_given_C + epsilon);
+      } else{
+	log_prob_wi_given_C = log(log_prob_wi_given_C);
+      }
 
       float context_E_grad = 0.0;
       float center_word_E_grad = 0.0;
