@@ -25,6 +25,7 @@ struct vocab_word {
 typedef struct {
   int id;
 } ThreadArg;
+ThreadArg *thread_arg;
 
 char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
@@ -46,9 +47,8 @@ const int table_size = 1e8;
 const double epsilon = 1e-8;
 int *table;
 
-const int EXP_LEN = 100;
+const int EXP_LEN = 200;
 float *exp_table; 
-ThreadArg *arg;
 
 // adadelta variables
 int adadelta_flag = 0; // 1 if we want to use AdaDelta, 0 for regular SGD
@@ -752,7 +752,13 @@ void *TrainModelThread(void *arg) {
       float log_prob_wi_given_C = 0.0;
       // NOTE: since the center word is in the first position of prob_wi_z_given_C[idx], just used the idx
       for (int idx = 0; idx < local_embed_size_plus_one; idx++) log_prob_wi_given_C += prob_w_z_given_C[idx];
-      log_prob_wi_given_C = log(log_prob_wi_given_C + epsilon);
+      if (log_prob_wi_given_C < 0.0000001){
+	printf("WARNING: p(w|C) is very low: %f", log_prob_wi_given_C);
+	fflush(stdout);
+	log_prob_wi_given_C = log(log_prob_wi_given_C + epsilon);
+      } else{
+	log_prob_wi_given_C = log(log_prob_wi_given_C);
+      }
       write_float(debug_file, "log p(w_i|C)", log_prob_wi_given_C, 0);
 
       float context_E_grad = 0.0;
@@ -891,13 +897,12 @@ void TrainModel() {
   // expanded-dim training for desired epochs
   printf("Training expanded dim model for %lld iters \n", iter);
   
-  arg = malloc(sizeof(ThreadArg) * num_threads);
+  thread_arg = malloc(sizeof(ThreadArg) * num_threads);
   for (int a = 0; a < num_threads; a++) {
-    arg[a].id = a;
-    printf("---%d\n", arg[a].id);
-    pthread_create(&pt[a], NULL, TrainModelThread, &arg[a]);
+    thread_arg[a].id = a;
+    pthread_create(&pt[a], NULL, TrainModelThread, &thread_arg[a]);
   }
-  free(arg);
+  free(thread_arg);
   for (int a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   printf("Writing input vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
