@@ -44,7 +44,7 @@ int negative = 5;
 int num_z_samples = 5;
 
 const int table_size = 1e8;
-const double epsilon = 1e-8;
+const double epsilon = 1e-10;
 int *table;
 
 const int EXP_LEN = 200;
@@ -87,9 +87,13 @@ float exp_fast(float x) {
   float exp_table_val = 0.0;
   if (x_int < -EXP_LEN) {
     exp_table_val = exp_table[0];
+    printf("WARNING: value %d under the MIN value in the exp table (-%d)\n", x_int, EXP_LEN);
+    fflush(stdout);
   } 
   else if (x_int > EXP_LEN) {
     exp_table_val = exp_table[2*EXP_LEN];
+    printf("WARNING: value %d over the MAX value in the exp table (%d)\n", x_int, EXP_LEN);
+    fflush(stdout);
   }
   else {
     exp_table_val = exp_table[x_int + EXP_LEN];
@@ -752,8 +756,8 @@ void *TrainModelThread(void *arg) {
       float log_prob_wi_given_C = 0.0;
       // NOTE: since the center word is in the first position of prob_wi_z_given_C[idx], just used the idx
       for (int idx = 0; idx < local_embed_size_plus_one; idx++) log_prob_wi_given_C += prob_w_z_given_C[idx];
-      if (log_prob_wi_given_C < 0.0000001){
-	printf("WARNING: p(w|C) is very low: %f", log_prob_wi_given_C);
+      if (log_prob_wi_given_C < epsilon){
+	printf("WARNING: p(w|C) is below epsilon padding: %.12f \n", log_prob_wi_given_C);
 	fflush(stdout);
 	log_prob_wi_given_C = log(log_prob_wi_given_C + epsilon);
       } else{
