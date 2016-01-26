@@ -321,23 +321,23 @@ void InitNet() {
   long long a, b;
   unsigned long long next_random = 1;
   // initialize context embeddings
-  a = posix_memalign((void **)&context_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
-  if (context_embed == NULL) {printf("Memory allocation failed\n"); exit(1);}
+  a = posix_memalign((void **)&input_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
+  if (input_embed == NULL) {printf("Memory allocation failed\n"); exit(1);}
   for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
       // random (instead of zero) to avoid multi-threaded problems
       next_random = next_random * (unsigned long long)25214903917 + 11;
-      context_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
+      input_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size; 
   }
   // initialize input embeddings
-  a = posix_memalign((void **)&input_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
+  a = posix_memalign((void **)&context_embed, 128, (long long)vocab_size * embed_max_size * sizeof(real));
   for (a = 0; a < vocab_size; a++) for (b = 0; b < embed_max_size; b++) {
       // only initialize first few dims so we can tell the true vector length
       if (b < embed_current_size){
 	next_random = next_random * (unsigned long long)25214903917 + 11;
-	input_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
+	context_embed[a * embed_max_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / embed_current_size;
       }
       else{
-	input_embed[a * embed_max_size + b] = 0.0;
+	context_embed[a * embed_max_size + b] = 0.0;
       }
   }
   
