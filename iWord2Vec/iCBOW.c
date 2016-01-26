@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
@@ -24,7 +25,6 @@ struct vocab_word {
 typedef struct {
   int id;
 } ThreadArg;
-ThreadArg *thread_arg;
 
 char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
@@ -46,8 +46,9 @@ const int table_size = 1e8;
 const double epsilon = 1e-8;
 int *table;
 
-const int EXP_LEN = 200;
+const int EXP_LEN = 100;
 float *exp_table; 
+ThreadArg *arg;
 
 // adadelta variables
 int adadelta_flag = 0; // 1 if we want to use AdaDelta, 0 for regular SGD
@@ -86,13 +87,9 @@ float exp_fast(float x) {
   float exp_table_val = 0.0;
   if (x_int < -EXP_LEN) {
     exp_table_val = exp_table[0];
-    printf("value %d under the MIN value in the exp table (-%d)\n", x_int, EXP_LEN);
-    fflush(stdout);
   } 
   else if (x_int > EXP_LEN) {
     exp_table_val = exp_table[2*EXP_LEN];
-    printf("value %d over the MAX value in the exp table (%d)\n", x_int, EXP_LEN);
-    fflush(stdout);
   }
   else {
     exp_table_val = exp_table[x_int + EXP_LEN];
@@ -352,6 +349,17 @@ void InitNet() {
   alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
 }
 
+// function to compute E(w, c, z)
+float compute_energy(long long w_idx, long long c_idx, int z){
+  long long a;
+  float energy = 0.0;
+  for (a = 0; a<z; a++) energy += 
+    -input_embed[w_idx + a]*context_embed[c_idx + a] + log_dim_penalty 
+    + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx+a] 
+    + sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
+  return energy;
+}
+
 /*
   Compute e^(-E(w,c,z)) for z=1,...,curr_z,curr_z+1  
   -> dist: float array to fill; should be of size curr_z+1 
@@ -478,16 +486,49 @@ void check_value(float val, char *name, int idx) {
     printf("idx: %d, name=%s, val=%f\n", idx, name, val);
     printf("-------------------------\n");
     fflush(stdout);
+    exit(1);
   }
 }
 
-void debug_prob(float probs[], int len) {
-  int i;
-  printf("*****************\n");
-  for (i = 0; i < len; ++i) {
-    printf("z = %i prob: %f\n", i, probs[i]); 
+void reset(char *DEBUG, FILE *debug_file) {
+  fclose(debug_file);
+  debug_file = fopen(DEBUG, "w+"); 
+  fseek(debug_file, 0, SEEK_SET);
+}
+
+void write_str(FILE *debug_file, char *name) {
+  fprintf(debug_file, "-------------------------------------------\n");
+  fprintf(debug_file, "%s\n", name);
+  fprintf(debug_file, "-------------------------------------------\n");
+}
+
+void write_float(FILE *debug_file, char *name, float val, int idx) {
+  fprintf(debug_file, "%s (%d): %f\n", name, idx, val);
+}
+
+void write_arr(FILE *debug_file, char *name, float *arr, int num_dims, ...) {
+  va_list valist;
+  va_start(valist, num_dims);
+
+  fprintf(debug_file, "-------------------------------------------\n");
+  fprintf(debug_file, "NAME: %s\n", name);
+  if (num_dims == 1) {
+    int len = va_arg(valist, int);
+    for (int i = 0; i < len; i++) {
+      fprintf(debug_file, "%d: %f\n", i, arr[i]);
+    } 
   }
-  printf("*****************\n");	
+  else if (num_dims == 2) {
+    int len1 = va_arg(valist, int);
+    int len2 = va_arg(valist, int);
+    for (int i = 0; i < len1; i++) {
+      fprintf(debug_file, "%d: \n", i);
+      for (int j = 0; j < len2; j++) {
+        fprintf(debug_file, "\t%d: %f\n", j, arr[i * len2 + j]);
+      }
+    }
+  } 
+  fprintf(debug_file, "*******************************************\n");
 }
 
 void print_args() {
@@ -526,6 +567,13 @@ void *TrainModelThread(void *arg) {
   // get thread arguments
   ThreadArg *thread_arg = (ThreadArg *)arg;
   int id = thread_arg->id;
+  printf("%d\n", thread_arg->id);
+  // Debug file
+  char DEBUG[12];
+  sprintf(DEBUG, "debug_%d.txt", id);
+  FILE *debug_file;
+  const int RESET_CNT = 501;
+  debug_file = fopen(DEBUG, "w+");
 
   long long a, b, d, word, center_word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], pos_context_counter;
@@ -558,7 +606,7 @@ void *TrainModelThread(void *arg) {
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 500000) { 
+    if (word_count - last_word_count > 10000) { // TODO: lowered for debugging
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -581,6 +629,10 @@ void *TrainModelThread(void *arg) {
 	}
       }
     }
+
+    // reset debug file
+    if (word_count_actual % RESET_CNT == 0) { reset(DEBUG, debug_file); }
+
     // read a new sentence / line
     if (sentence_length == 0) {
       while (1) {
@@ -664,6 +716,8 @@ void *TrainModelThread(void *arg) {
       }
       // compute p(z|w,c1,..cK)
       compute_p_z_given_w_C(probs_z_given_w_C, sum_probs_z_given_w_C, pos_context_store, a, pos_context_counter, local_embed_size_plus_one - 1); 
+      write_arr(debug_file, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
+      write_arr(debug_file, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
 
       // sample z: z_hat ~ p(z|w,c1,...,cK) and expand if necessary
       // no need to normalize, function does it for us
@@ -691,12 +745,15 @@ void *TrainModelThread(void *arg) {
       // compute p(w,z|c1,...,cK)
       compute_p_w_z_given_C(a, pos_context_store, negative_list, pos_context_counter, negative, prob_w_z_given_C, 
         sum_prob_w_z_given_C, local_embed_size_plus_one);
+      write_arr(debug_file, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
+      write_arr(debug_file, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
  
       // compute p(w|c1...cK) 
       float log_prob_wi_given_C = 0.0;
       // NOTE: since the center word is in the first position of prob_wi_z_given_C[idx], just used the idx
       for (int idx = 0; idx < local_embed_size_plus_one; idx++) log_prob_wi_given_C += prob_w_z_given_C[idx];
       log_prob_wi_given_C = log(log_prob_wi_given_C + epsilon);
+      write_float(debug_file, "log p(w_i|C)", log_prob_wi_given_C, 0);
 
       float context_E_grad = 0.0;
       float center_word_E_grad = 0.0;
@@ -704,6 +761,7 @@ void *TrainModelThread(void *arg) {
 
       // SUM OVER THE SAMPLED Z's
       // ONLY NEED TO CALC FOR PREDICTION PART OF GRAD
+      write_str(debug_file, "PREDICTION GRADIENT");
       for (int m = 0; m < num_z_samples; m++) { 
 	for (int k = 0; k < pos_context_counter; k++){
 	  if (k == a) continue; // don't use center word w_i
@@ -713,15 +771,19 @@ void *TrainModelThread(void *arg) {
 	    center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
 	    gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
 	    gradient[a*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
-	  }
+	    write_float(debug_file, "context E grad", context_E_grad, j);
+            write_float(debug_file, "center word E grad", center_word_E_grad, j);
+            write_float(debug_file, "pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
+            write_float(debug_file, "dinput gradient", gradient[a*local_embed_size_plus_one + j], j);
+          }
 	}
       }
 
       // create variable that adjusts loops according to if dims were expanded 
       int loop_bound = local_embed_size_plus_one - 1;
-      //if (z_max == local_embed_size_plus_one){
-      //loop_bound = local_embed_size_plus_one;
-      //}
+      if (z_max == local_embed_size_plus_one){
+	loop_bound = local_embed_size_plus_one;
+      }
 
       // CALC DIMENSION GRADIENT TERM FOR CONTEXT & CENTER
       for (int k = 0; k < pos_context_counter; k++){
@@ -802,6 +864,7 @@ void *TrainModelThread(void *arg) {
   free(sum_probs_z_given_w_C);
   free(negative_list); 
   
+  fclose(debug_file);                                                           
   pthread_exit(NULL);
 }
 
@@ -811,8 +874,6 @@ void TrainModel() {
   time_t now = time (0);                                                          
   strftime(buff, 100, "%Y-%m-%d %H:%M:%S.000", localtime (&now));               
   printf ("Strart training: %s\n", buff); 
-
-  long a;  
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
@@ -830,20 +891,20 @@ void TrainModel() {
   // expanded-dim training for desired epochs
   printf("Training expanded dim model for %lld iters \n", iter);
   
-  thread_arg = malloc(sizeof(ThreadArg) * num_threads);
-  for (a = 0; a < num_threads; a++) {
-    thread_arg[a].id = a;
-    pthread_create(&pt[a], NULL, TrainModelThread, &thread_arg[a]);
+  arg = malloc(sizeof(ThreadArg) * num_threads);
+  for (int a = 0; a < num_threads; a++) {
+    arg[a].id = a;
+    printf("---%d\n", arg[a].id);
+    pthread_create(&pt[a], NULL, TrainModelThread, &arg[a]);
   }
-
-  for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+  free(arg);
+  for (int a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   printf("Writing input vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
   printf("Writing context vectors to %s\n", context_output_file);
   if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 
   // free globally used space
-  free(thread_arg);
   free(exp_table);
   if (adadelta_flag == 1){
     free(input_grad_history);
