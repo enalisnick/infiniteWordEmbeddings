@@ -770,10 +770,10 @@ void *TrainModelThread(void *arg) {
 	    center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
 	    gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
 	    gradient[a*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
-	    write_float(debug_file, "context E grad", context_E_grad, j);
-            write_float(debug_file, "center word E grad", center_word_E_grad, j);
-            write_float(debug_file, "pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
-            write_float(debug_file, "input word gradient", gradient[a*local_embed_size_plus_one + j], j);
+	    write_float(debug_file, "prediction gradient: context E grad", context_E_grad, j);
+            write_float(debug_file, "prediction gradient: center word E grad", center_word_E_grad, j);
+            write_float(debug_file, "prediction gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
+            write_float(debug_file, "prediction gradient: input word gradient", gradient[a*local_embed_size_plus_one + j], j);
           }
 	}
       }
@@ -793,8 +793,8 @@ void *TrainModelThread(void *arg) {
 	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j]; 
 	  gradient[k*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * sum_probs_z_given_w_C[j] * window_normalization * context_E_grad;
 	  gradient[a*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * sum_probs_z_given_w_C[j] * window_normalization * center_word_E_grad;
-	  write_float(debug_file, "context E grad", context_E_grad, j);
-	  write_float(debug_file, "center word E grad", center_word_E_grad, j);
+	  write_float(debug_file, "dimension gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
+	  write_float(debug_file, "dimension gradient: input word gradient", gradient[a*local_embed_size_plus_one + j], j);
 	}
       }
 
@@ -813,8 +813,10 @@ void *TrainModelThread(void *arg) {
 	    // add to gradient for negative example 
 	    check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j);
 	    neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
-	    write_float(debug_file, "context E grad", context_E_grad, j);
-            write_float(debug_file, "negative center word E grad", neg_center_word_E_grad, j);
+	    write_float(debug_file, "normalization gradient: context E grad", context_E_grad, j);
+            write_float(debug_file, "normalization gradient: negative center word E grad", neg_center_word_E_grad, j);
+	    write_float(debug_file, "normalization gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
+            write_float(debug_file, "normalization gradient: negative input word gradient", neg_gradient[d*local_embed_size_plus_one + j], j);
 	  }
 	  // add subgradient for postive center word
 	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
@@ -823,8 +825,8 @@ void *TrainModelThread(void *arg) {
 	  gradient[k*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[j] * window_normalization * context_E_grad;
 	  // add to center word grad
 	  gradient[a*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[j] * window_normalization * center_word_E_grad;
-	  write_float(debug_file, "context E grad", context_E_grad, j);
-	  write_float(debug_file, "center word E grad", center_word_E_grad, j);
+	  write_float(debug_file, "normalization gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
+	  write_float(debug_file, "normalization gradient: (true) input word gradient", gradient[a*local_embed_size_plus_one + j], j);
 	}
       }
 
