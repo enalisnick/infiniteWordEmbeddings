@@ -562,10 +562,10 @@ void *TrainModelThread(void *arg) {
   int id = thread_arg->id;
   printf("%d\n", thread_arg->id);
   // Debug file
-  char DEBUG[12];
+  char DEBUG[13];
   sprintf(DEBUG, "debug_%d.txt", id);
   FILE *debug_file;
-  const int RESET_CNT = 501;
+  const int RESET_CNT = 1000000;
   debug_file = fopen(DEBUG, "w+");
 
   long long a, b, d, word, center_word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
