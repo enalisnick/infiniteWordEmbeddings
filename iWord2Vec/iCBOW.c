@@ -565,7 +565,7 @@ void *TrainModelThread(void *arg) {
   char DEBUG[13];
   sprintf(DEBUG, "debug_%d.txt", id);
   FILE *debug_file;
-  const int RESET_CNT = 1000000;
+  const int RESET_CNT = 1000001;
   debug_file = fopen(DEBUG, "w+");
 
   long long a, b, d, word, center_word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
@@ -599,7 +599,7 @@ void *TrainModelThread(void *arg) {
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 10000) { // TODO: lowered for debugging
+    if (word_count - last_word_count > 500000) { // TODO: lowered for debugging
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -683,6 +683,9 @@ void *TrainModelThread(void *arg) {
     }
 
     float window_normalization = 1.0/(pos_context_counter-1.0);
+    if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+      write_float(debug_file, "window normalization", window_normalization, 0);
+    }
  
     // MAIN LOOP THROUGH POSITIVE CONTEXT
     log_prob_per_word = 0.0;
@@ -709,8 +712,10 @@ void *TrainModelThread(void *arg) {
       }
       // compute p(z|w,c1,..cK)
       compute_p_z_given_w_C(probs_z_given_w_C, sum_probs_z_given_w_C, pos_context_store, a, pos_context_counter, local_embed_size_plus_one - 1); 
-      write_arr(debug_file, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
-      write_arr(debug_file, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+	write_arr(debug_file, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
+	write_arr(debug_file, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
+      }
 
       // sample z: z_hat ~ p(z|w,c1,...,cK) and expand if necessary
       // no need to normalize, function does it for us
@@ -738,9 +743,11 @@ void *TrainModelThread(void *arg) {
       // compute p(w,z|c1,...,cK)
       compute_p_w_z_given_C(a, pos_context_store, negative_list, pos_context_counter, negative, prob_w_z_given_C, 
         sum_prob_w_z_given_C, local_embed_size_plus_one);
-      write_arr(debug_file, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
-      write_arr(debug_file, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
- 
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+	write_arr(debug_file, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
+	write_arr(debug_file, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
+      }
+
       // compute p(w|c1...cK) 
       float log_prob_wi_given_C = 0.0;
       // NOTE: since the center word is in the first position of prob_wi_z_given_C[idx], just used the idx
@@ -752,7 +759,9 @@ void *TrainModelThread(void *arg) {
       } else{
 	log_prob_wi_given_C = log(log_prob_wi_given_C);
       }
-      write_float(debug_file, "log p(w_i|C)", log_prob_wi_given_C, 0);
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+	write_float(debug_file, "log p(w_i|C)", log_prob_wi_given_C, 0);
+      }
 
       float context_E_grad = 0.0;
       float center_word_E_grad = 0.0;
@@ -770,10 +779,10 @@ void *TrainModelThread(void *arg) {
 	    center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
 	    gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
 	    gradient[a*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
-	    write_float(debug_file, "prediction gradient: context E grad", context_E_grad, j);
-            write_float(debug_file, "prediction gradient: center word E grad", center_word_E_grad, j);
-            write_float(debug_file, "prediction gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
-            write_float(debug_file, "prediction gradient: input word gradient", gradient[a*local_embed_size_plus_one + j], j);
+	    if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+	      write_float(debug_file, "context E grad", context_E_grad, j);
+	      write_float(debug_file, "center word E grad", center_word_E_grad, j);
+	    }
           }
 	}
       }
@@ -790,14 +799,13 @@ void *TrainModelThread(void *arg) {
 	context_word_position = pos_context_store[k] * embed_max_size;
 	for (int j = 0; j < loop_bound; j++){
 	  context_E_grad = input_embed[center_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
-	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j]; 
+	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
 	  gradient[k*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * sum_probs_z_given_w_C[j] * window_normalization * context_E_grad;
 	  gradient[a*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * sum_probs_z_given_w_C[j] * window_normalization * center_word_E_grad;
-	  write_float(debug_file, "dimension gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
-	  write_float(debug_file, "dimension gradient: input word gradient", gradient[a*local_embed_size_plus_one + j], j);
 	}
       }
 
+      write_str(debug_file, "NORMALIZATION GRADIENT");
       // CALC PREDICTION NORMALIZATION GRADIENT
       for (int j = 0; j < loop_bound; j++){
         for (int k = 0; k < pos_context_counter; k++){
@@ -813,20 +821,18 @@ void *TrainModelThread(void *arg) {
 	    // add to gradient for negative example 
 	    check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j);
 	    neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
-	    write_float(debug_file, "normalization gradient: context E grad", context_E_grad, j);
-            write_float(debug_file, "normalization gradient: negative center word E grad", neg_center_word_E_grad, j);
-	    write_float(debug_file, "normalization gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
-            write_float(debug_file, "normalization gradient: negative input word gradient", neg_gradient[d*local_embed_size_plus_one + j], j);
+	    if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+	      write_float(debug_file, "normalization gradient: context E grad", context_E_grad, j);
+	      write_float(debug_file, "normalization gradient: negative center word E grad", neg_center_word_E_grad, j);
+	    }
 	  }
 	  // add subgradient for postive center word
 	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
 	  context_E_grad = input_embed[center_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j]; 
-	  // add to pos context gradient                                                                                                                                                  
+	  // add to pos context gradient                                                                                                                                            
 	  gradient[k*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[j] * window_normalization * context_E_grad;
 	  // add to center word grad
 	  gradient[a*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[j] * window_normalization * center_word_E_grad;
-	  write_float(debug_file, "normalization gradient: pos context gradient", gradient[k*local_embed_size_plus_one + j], j);
-	  write_float(debug_file, "normalization gradient: (true) input word gradient", gradient[a*local_embed_size_plus_one + j], j);
 	}
       }
 
