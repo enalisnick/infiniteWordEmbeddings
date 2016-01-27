@@ -822,8 +822,8 @@ void *TrainModelThread(void *arg) {
 	    check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j);
 	    neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
 	    if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
-	      write_float(debug_file, "normalization gradient: context E grad", context_E_grad, j);
-	      write_float(debug_file, "normalization gradient: negative center word E grad", neg_center_word_E_grad, j);
+	      write_float(debug_file, "context E grad", context_E_grad, j);
+	      write_float(debug_file, "negative center word E grad", neg_center_word_E_grad, j);
 	    }
 	  }
 	  // add subgradient for postive center word
