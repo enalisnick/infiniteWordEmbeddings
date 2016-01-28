@@ -683,7 +683,7 @@ void *TrainModelThread(void *arg) {
     }
 
     float window_normalization = 1.0/(pos_context_counter-1.0);
-    if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
       write_float(debug_file, "window normalization", window_normalization, 0);
     }
  
@@ -712,7 +712,7 @@ void *TrainModelThread(void *arg) {
       }
       // compute p(z|w,c1,..cK)
       compute_p_z_given_w_C(probs_z_given_w_C, sum_probs_z_given_w_C, pos_context_store, a, pos_context_counter, local_embed_size_plus_one - 1); 
-      if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
 	write_arr(debug_file, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
 	write_arr(debug_file, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
       }
@@ -743,7 +743,7 @@ void *TrainModelThread(void *arg) {
       // compute p(w,z|c1,...,cK)
       compute_p_w_z_given_C(a, pos_context_store, negative_list, pos_context_counter, negative, prob_w_z_given_C, 
         sum_prob_w_z_given_C, local_embed_size_plus_one);
-      if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
 	write_arr(debug_file, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
 	write_arr(debug_file, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
       }
@@ -759,7 +759,7 @@ void *TrainModelThread(void *arg) {
       } else{
 	log_prob_wi_given_C = log(log_prob_wi_given_C);
       }
-      if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
 	write_float(debug_file, "log p(w_i|C)", log_prob_wi_given_C, 0);
       }
 
@@ -769,7 +769,9 @@ void *TrainModelThread(void *arg) {
 
       // SUM OVER THE SAMPLED Z's
       // ONLY NEED TO CALC FOR PREDICTION PART OF GRAD
-      write_str(debug_file, "PREDICTION GRADIENT");
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
+	write_str(debug_file, "PREDICTION GRADIENT");
+      }
       for (int m = 0; m < num_z_samples; m++) { 
 	for (int k = 0; k < pos_context_counter; k++){
 	  if (k == a) continue; // don't use center word w_i
@@ -779,7 +781,7 @@ void *TrainModelThread(void *arg) {
 	    center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
 	    gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
 	    gradient[a*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
-	    if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+	    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
 	      write_float(debug_file, "context E grad", context_E_grad, j);
 	      write_float(debug_file, "center word E grad", center_word_E_grad, j);
 	    }
@@ -805,7 +807,9 @@ void *TrainModelThread(void *arg) {
 	}
       }
 
-      write_str(debug_file, "NORMALIZATION GRADIENT");
+      if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
+	write_str(debug_file, "NORMALIZATION GRADIENT");
+      }
       // CALC PREDICTION NORMALIZATION GRADIENT
       for (int j = 0; j < loop_bound; j++){
         for (int k = 0; k < pos_context_counter; k++){
@@ -821,7 +825,7 @@ void *TrainModelThread(void *arg) {
 	    // add to gradient for negative example 
 	    check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j);
 	    neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
-	    if (word_count_actual / (real)(iter * train_words + 1) * 100 > .25){
+	    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 25){
 	      write_float(debug_file, "context E grad", context_E_grad, j);
 	      write_float(debug_file, "negative center word E grad", neg_center_word_E_grad, j);
 	    }
