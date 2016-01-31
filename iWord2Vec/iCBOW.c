@@ -25,7 +25,6 @@ struct vocab_word {
 typedef struct {
   int id;
 } ThreadArg;
-ThreadArg *thread_arg;
 
 char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
@@ -578,15 +577,15 @@ void save_vectors(char *output_file, long long int vocab_size, long long int emb
   fclose(fo);
 }
 
-void *TrainModelThread(void *arg) {
+void *TrainModelThread(void *thread_id) {
   // get thread arguments
-  ThreadArg *thread_arg = (ThreadArg *)arg;
-  int id = thread_arg->id;
-  printf("%d\n", thread_arg->id);
+  //ThreadArg *thread_arg = (ThreadArg *)arg;
+  long id = (long) thread_id;
+  printf("%ld\n", id);
   
   // Debug file
   char DEBUG[13];
-  sprintf(DEBUG, "debug_%d.txt", id);
+  sprintf(DEBUG, "debug_%d.txt", (int)id);
   int debug_cntr = 0;
   char buffer[MAX_DEBUG_SIZE][MAX_STR_SIZE + 1];  // max string size is 499 
 
@@ -912,13 +911,10 @@ void TrainModel() {
   // expanded-dim training for desired epochs
   printf("Training expanded dim model for %lld iters \n", iter);
   
-  thread_arg = malloc(sizeof(ThreadArg) * num_threads);
-  for (int a = 0; a < num_threads; a++) {
-    thread_arg[a].id = a;
-    pthread_create(&pt[a], NULL, TrainModelThread, &thread_arg[a]);
+  for (long a = 0; a < num_threads; a++) {
+    pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
   }
-  free(thread_arg);
-  for (int a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+  for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   printf("Writing input vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
   printf("Writing context vectors to %s\n", context_output_file);

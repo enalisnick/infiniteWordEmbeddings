@@ -24,7 +24,6 @@ struct vocab_word {
 typedef struct {
   int id;
 } ThreadArg;
-ThreadArg *thread_arg;
 
 char train_file[MAX_STRING], output_file[MAX_STRING], context_output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
@@ -502,10 +501,9 @@ void save_vectors(char *output_file, long long int vocab_size, long long int emb
   fclose(fo);
 }
 
-void *TrainModelThread(void *arg) {
+void *TrainModelThread(void *thread_id) {
   // get thread arguments
-  ThreadArg *thread_arg = (ThreadArg *)arg;
-  int id = thread_arg->id;
+  long id = (long) thread_id;
 
   long long a, b, d, word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
@@ -762,7 +760,6 @@ void TrainModel() {
   strftime(buff, 100, "%Y-%m-%d %H:%M:%S.000", localtime (&now));               
   printf ("Strart training: %s\n", buff); 
 
-  long a;  
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
@@ -780,19 +777,16 @@ void TrainModel() {
   // expanded-dim training for desired epochs
   printf("Training expanded dim model for %lld iters \n", iter);
   
-  thread_arg = malloc(sizeof(ThreadArg) * num_threads);
-  for (a = 0; a < num_threads; a++) {
-    thread_arg[a].id = a;
-    pthread_create(&pt[a], NULL, TrainModelThread, &thread_arg[a]);
+  for (long a = 0; a < num_threads; a++) {
+    pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
   }
-  for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+  for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
   printf("Writing input vectors to %s\n", output_file);
   save_vectors(output_file, vocab_size, embed_current_size, vocab, input_embed);
   printf("Writing context vectors to %s\n", context_output_file);
   if (strlen(context_output_file) > 0)  save_vectors(context_output_file, vocab_size, embed_current_size, vocab, context_embed);
 
   // free globally used space
-  free(thread_arg);
   free(exp_table);
   if (adadelta_flag == 1){
     free(input_grad_history);
