@@ -56,6 +56,9 @@ float *input_grad_history, *context_grad_history;
 float rho_adadelta = 0.95; // taken from adadelta paper
 float epsilon_adadelta = 0.1; // taken from https://github.com/jeevanshankar1991/Word2Vec
 
+// max debug string size
+const int MAX_DEBUG_SIZE = 10000;
+const int MAX_STR_SIZE = 499;
 /*
   Build table which precompute exp function for certain integer
   values
@@ -470,7 +473,19 @@ int sample_from_mult_list(float float_probs[], int k, int vals[], int N,
   return max_idx;
 }
 
-void check_value(float val, char *name, int idx) {
+void write_to_file(char buffer[][MAX_STR_SIZE], int debug_cntr, char *debug_filename) {
+  FILE *debug_file;
+  debug_file = fopen(debug_filename, "w");
+  for (int i = 0; i < debug_cntr; i++) {
+    //printf("%s\n", buffer[i]);
+    fputs(buffer[i], debug_file);
+  }   
+  //fflush(stdout);
+  fclose(debug_file);
+}
+
+void check_value(float val, char *name, int idx, char buffer[][MAX_STR_SIZE], 
+  int debug_cntr, char *debug_filename) {
   if (isnan(val) || isinf(val)) { 
     printf("-------------------------\n");
     if (isnan(val)) printf("NAN!\n");
@@ -479,49 +494,56 @@ void check_value(float val, char *name, int idx) {
     printf("idx: %d, name=%s, val=%f\n", idx, name, val);
     printf("-------------------------\n");
     fflush(stdout);
+    write_to_file(buffer, debug_cntr, debug_filename);
     exit(1);
   }
 }
 
-void reset(char *DEBUG, FILE *debug_file) {
-  fclose(debug_file);
-  debug_file = fopen(DEBUG, "w+"); 
-  fseek(debug_file, 0, SEEK_SET);
+void inc(int *value, const int MAX) {
+  *value = (*value + 1) % MAX;
 }
 
-void write_str(FILE *debug_file, char *name) {
-  fprintf(debug_file, "-------------------------------------------\n");
-  fprintf(debug_file, "%s\n", name);
-  fprintf(debug_file, "-------------------------------------------\n");
+void write_to_buffer(char buffer[][MAX_STR_SIZE], int *debug_cntr, char *str, ...) {
+  va_list argptr;
+  va_start(argptr, str);
+  vsnprintf(buffer[*debug_cntr], MAX_STR_SIZE, str, argptr);
+  va_end(argptr);
+  inc(debug_cntr, MAX_DEBUG_SIZE); 
 }
 
-void write_float(FILE *debug_file, char *name, float val, int idx) {
-  fprintf(debug_file, "%s (%d): %f\n", name, idx, val);
+void write_str(char buffer[][MAX_STR_SIZE], int *debug_cntr, char *name) {
+  write_to_buffer(buffer, debug_cntr, "-------------------------------------------\n");
+  write_to_buffer(buffer, debug_cntr, "%s\n", name);
+  write_to_buffer(buffer, debug_cntr, "-------------------------------------------\n");
 }
 
-void write_arr(FILE *debug_file, char *name, float *arr, int num_dims, ...) {
+void write_float(char buffer[][MAX_STR_SIZE], int *debug_cntr, char *name, float val, int idx) {
+  write_to_buffer(buffer, debug_cntr, "%s (%d): %f\n", name, idx, val);
+}
+
+void write_arr(char buffer[][MAX_STR_SIZE], int *debug_cntr, char *name, float *arr, int num_dims, ...) {
   va_list valist;
   va_start(valist, num_dims);
 
-  fprintf(debug_file, "-------------------------------------------\n");
-  fprintf(debug_file, "NAME: %s\n", name);
+  write_to_buffer(buffer, debug_cntr, "-------------------------------------------\n");
+  write_to_buffer(buffer, debug_cntr, "NAME: %s\n", name);
   if (num_dims == 1) {
     int len = va_arg(valist, int);
     for (int i = 0; i < len; i++) {
-      fprintf(debug_file, "%d: %f\n", i, arr[i]);
+      write_to_buffer(buffer, debug_cntr, "%d: %f\n", i, arr[i]);
     } 
   }
   else if (num_dims == 2) {
     int len1 = va_arg(valist, int);
     int len2 = va_arg(valist, int);
     for (int i = 0; i < len1; i++) {
-      fprintf(debug_file, "%d: \n", i);
+      write_to_buffer(buffer, debug_cntr, "%d: \n", i);
       for (int j = 0; j < len2; j++) {
-        fprintf(debug_file, "\t%d: %f\n", j, arr[i * len2 + j]);
+        write_to_buffer(buffer, debug_cntr, "\t%d: %f\n", j, arr[i * len2 + j]);
       }
     }
   } 
-  fprintf(debug_file, "*******************************************\n");
+  write_to_buffer(buffer, debug_cntr, "*******************************************\n");
 }
 
 void print_args() {
@@ -561,12 +583,12 @@ void *TrainModelThread(void *arg) {
   ThreadArg *thread_arg = (ThreadArg *)arg;
   int id = thread_arg->id;
   printf("%d\n", thread_arg->id);
+  
   // Debug file
   char DEBUG[13];
   sprintf(DEBUG, "debug_%d.txt", id);
-  FILE *debug_file;
-  const int RESET_CNT = 2001;
-  debug_file = fopen(DEBUG, "w+");
+  int debug_cntr = 0;
+  char buffer[MAX_DEBUG_SIZE][MAX_STR_SIZE + 1];  // max string size is 499 
 
   long long a, b, d, word, center_word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], pos_context_counter;
@@ -621,9 +643,6 @@ void *TrainModelThread(void *arg) {
 	}
       }
     }
-
-    // reset debug file
-    if (word_count_actual % RESET_CNT == 0) { reset(DEBUG, debug_file); }
 
     // read a new sentence / line
     if (sentence_length == 0) {
@@ -684,9 +703,7 @@ void *TrainModelThread(void *arg) {
     }
 
     float window_normalization = 1.0/(pos_context_counter-1.0);
-    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 120){
-      write_float(debug_file, "window normalization", window_normalization, 0);
-    }
+    write_float(buffer, &debug_cntr, "window normalization", window_normalization, 0);
 
     // center word to predict
     center_word = pos_context_store[input_word_position];
@@ -709,10 +726,8 @@ void *TrainModelThread(void *arg) {
     // compute p(z|w,c1,..cK)
     compute_p_z_given_w_C(probs_z_given_w_C, sum_probs_z_given_w_C, pos_context_store, input_word_position, pos_context_counter, local_embed_size_plus_one - 1); 
     
-    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 120){
-      write_arr(debug_file, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
-      write_arr(debug_file, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
-    }
+    write_arr(buffer, &debug_cntr, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
+    write_arr(buffer, &debug_cntr, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
 
     // sample z: z_hat ~ p(z|w,c1,...,cK) and expand if necessary
     // no need to normalize, function does it for us
@@ -741,10 +756,8 @@ void *TrainModelThread(void *arg) {
     compute_p_w_z_given_C(input_word_position, pos_context_store, negative_list, pos_context_counter, negative, prob_w_z_given_C, 
         sum_prob_w_z_given_C, local_embed_size_plus_one);
 
-    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 120){
-      write_arr(debug_file, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
-      write_arr(debug_file, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
-    }
+    write_arr(buffer, &debug_cntr, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
+    write_arr(buffer, &debug_cntr, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
 
     // compute p(w|c1...cK) 
     float log_prob_wi_given_C = 0.0;
@@ -758,9 +771,7 @@ void *TrainModelThread(void *arg) {
       log_prob_wi_given_C = log(log_prob_wi_given_C);
     }
 
-    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 125){
-      write_float(debug_file, "log p(w_i|C)", log_prob_wi_given_C, 0);
-    }
+    write_float(buffer, &debug_cntr, "log p(w_i|C)", log_prob_wi_given_C, 0);
 
     float context_E_grad = 0.0;
     float center_word_E_grad = 0.0;
@@ -768,9 +779,7 @@ void *TrainModelThread(void *arg) {
 
     // SUM OVER THE SAMPLED Z's
     // ONLY NEED TO CALC FOR PREDICTION PART OF GRAD
-    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 125){
-      write_str(debug_file, "PREDICTION GRADIENT");
-    }
+    write_str(buffer, &debug_cntr, "PREDICTION GRADIENT");
 
     for (int m = 0; m < num_z_samples; m++) { 
       for (int k = 0; k < pos_context_counter; k++){
@@ -782,10 +791,8 @@ void *TrainModelThread(void *arg) {
 	  gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
 	  gradient[input_word_position*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
 	  
-	  if (word_count_actual / (real)(iter * train_words + 1) * 100 > 125){
-	    write_float(debug_file, "context E grad", context_E_grad, j);
-	    write_float(debug_file, "center word E grad", center_word_E_grad, j);
-	  }
+	  write_float(buffer, &debug_cntr, "context E grad", context_E_grad, j);
+	  write_float(buffer, &debug_cntr, "center word E grad", center_word_E_grad, j);
 
 	}
       }
@@ -809,9 +816,7 @@ void *TrainModelThread(void *arg) {
       }
     }
 
-    if (word_count_actual / (real)(iter * train_words + 1) * 100 > 125){
-      write_str(debug_file, "NORMALIZATION GRADIENT");
-    }
+    write_str(buffer, &debug_cntr, "NORMALIZATION GRADIENT");
 
     // CALC PREDICTION NORMALIZATION GRADIENT
     for (int j = 0; j < loop_bound; j++){
@@ -826,13 +831,12 @@ void *TrainModelThread(void *arg) {
 	  gradient[k*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] 
               * window_normalization * context_E_grad;
 	  // add to gradient for negative example 
-	  check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j);
+	  check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j,
+            buffer, debug_cntr, DEBUG);
 	  neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
 
-	  if (word_count_actual / (real)(iter * train_words + 1) * 100 > 125){
-	    write_float(debug_file, "context E grad", context_E_grad, j);
-	    write_float(debug_file, "negative center word E grad", neg_center_word_E_grad, j);
-	  }
+	  write_float(buffer, &debug_cntr, "context E grad", context_E_grad, j);
+	  write_float(buffer, &debug_cntr, "negative center word E grad", neg_center_word_E_grad, j);
 	}
 	// add subgradient for postive center word
 	center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
@@ -848,7 +852,7 @@ void *TrainModelThread(void *arg) {
     for (int j = 0; j < loop_bound; j++){
       for (int k = 0; k < pos_context_counter; k++){
 	context_word_position = pos_context_store[k] * embed_max_size;
-	check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j);
+	check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j, buffer, debug_cntr, DEBUG);
 	if (k == input_word_position){
 	  input_embed[context_word_position + j] -= alpha_per_dim[j] * gradient[k*local_embed_size_plus_one + j];
 	} else{
@@ -882,7 +886,6 @@ void *TrainModelThread(void *arg) {
   free(sum_probs_z_given_w_C);
   free(negative_list); 
   
-  fclose(debug_file);                                                           
   pthread_exit(NULL);
 }
 
