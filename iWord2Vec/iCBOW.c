@@ -366,6 +366,7 @@ void InitNet() {
 float compute_z_dist(float *dist, long long *context, int center_idx, int context_size, int curr_z) { 
   float norm = 0.0;
   long long w_idx = context[center_idx] * embed_max_size;
+  float window_norm = 1.0/(context_size - 1.0);
   for (int a = 0; a < curr_z; a++) {
     // precompute context values
     float context_sum = 0;
@@ -377,16 +378,16 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
       context_norms += context_embed[c_idx + a] * context_embed[c_idx + a];
     }
     // compute entergy
-    float val = -input_embed[w_idx + a]*context_sum 
-      +(context_size-1)*log_dim_penalty + (context_size-1)*sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
-                +sparsity_weight*context_norms;
+    float val = -window_norm*input_embed[w_idx + a]*context_sum 
+      + log_dim_penalty + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
+                + window_norm*sparsity_weight*context_norms;
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
-    dist[a] = exp_fast((1.0/(context_size - 1.0)) * -dist[a]);
+    dist[a] = exp_fast(-dist[a]);
     norm += dist[a];
   }
-  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast((1.0/(context_size - 1.0)) * -dist[curr_z]);
+  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-dist[curr_z]);
   norm += dist[curr_z];
 
   return norm;
