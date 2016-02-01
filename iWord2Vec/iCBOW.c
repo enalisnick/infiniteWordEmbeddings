@@ -727,7 +727,7 @@ void *TrainModelThread(void *thread_id) {
     }
 
     float window_normalization = 1.0/(pos_context_counter-1.0);
-    write_float(buffer, &debug_cntr, "window normalization", window_normalization, 0);
+    //write_float(buffer, &debug_cntr, "window normalization", window_normalization, 0);
 
     // center word to predict
     center_word = pos_context_store[input_word_position];
@@ -750,8 +750,8 @@ void *TrainModelThread(void *thread_id) {
     // compute p(z|w,c1,..cK)
     compute_p_z_given_w_C(probs_z_given_w_C, sum_probs_z_given_w_C, pos_context_store, input_word_position, pos_context_counter, local_embed_size_plus_one - 1); 
     
-    write_arr(buffer, &debug_cntr, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
-    write_arr(buffer, &debug_cntr, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
+    //write_arr(buffer, &debug_cntr, "p(z|w,C)", probs_z_given_w_C, 1, local_embed_size_plus_one);
+    //write_arr(buffer, &debug_cntr, "sum p(z|w,C)", sum_probs_z_given_w_C, 1, local_embed_size_plus_one);
 
     // sample z: z_hat ~ p(z|w,c1,...,cK) and expand if necessary
     // no need to normalize, function does it for us
@@ -780,8 +780,8 @@ void *TrainModelThread(void *thread_id) {
     compute_p_w_z_given_C(input_word_position, pos_context_store, negative_list, pos_context_counter, negative, prob_w_z_given_C, 
         sum_prob_w_z_given_C, local_embed_size_plus_one);
 
-    write_arr(buffer, &debug_cntr, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
-    write_arr(buffer, &debug_cntr, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
+    //write_arr(buffer, &debug_cntr, "p(w,z|C)", prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
+    //write_arr(buffer, &debug_cntr, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
 
     // compute p(w|c1...cK) 
     float log_prob_wi_given_C = sum_prob_w_z_given_C[0];
@@ -793,7 +793,7 @@ void *TrainModelThread(void *thread_id) {
       log_prob_wi_given_C = log(log_prob_wi_given_C);
     }
 
-    write_float(buffer, &debug_cntr, "log p(w_i|C)", log_prob_wi_given_C, 0);
+    //write_float(buffer, &debug_cntr, "log p(w_i|C)", log_prob_wi_given_C, 0);
 
     float context_E_grad = 0.0;
     float center_word_E_grad = 0.0;
@@ -801,7 +801,7 @@ void *TrainModelThread(void *thread_id) {
 
     // SUM OVER THE SAMPLED Z's
     // ONLY NEED TO CALC FOR PREDICTION PART OF GRAD
-    write_str(buffer, &debug_cntr, "PREDICTION GRADIENT");
+    //write_str(buffer, &debug_cntr, "PREDICTION GRADIENT");
 
     for (int m = 0; m < num_z_samples; m++) { 
       for (int k = 0; k < pos_context_counter; k++){
@@ -813,8 +813,8 @@ void *TrainModelThread(void *thread_id) {
 	  gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
 	  gradient[input_word_position*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
 	  
-	  write_float(buffer, &debug_cntr, "context E grad", context_E_grad, j);
-	  write_float(buffer, &debug_cntr, "center word E grad", center_word_E_grad, j);
+	  //write_float(buffer, &debug_cntr, "context E grad", context_E_grad, j);
+	  //write_float(buffer, &debug_cntr, "center word E grad", center_word_E_grad, j);
 
 	}
       }
@@ -838,7 +838,7 @@ void *TrainModelThread(void *thread_id) {
       }
     }
 
-    write_str(buffer, &debug_cntr, "NORMALIZATION GRADIENT");
+    //write_str(buffer, &debug_cntr, "NORMALIZATION GRADIENT");
 
     // CALC PREDICTION NORMALIZATION GRADIENT
     for (int j = 0; j < loop_bound; j++){
@@ -857,8 +857,8 @@ void *TrainModelThread(void *thread_id) {
             buffer, debug_cntr, DEBUG);
 	  neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
 
-	  write_float(buffer, &debug_cntr, "context E grad", context_E_grad, j);
-	  write_float(buffer, &debug_cntr, "negative center word E grad", neg_center_word_E_grad, j);
+	  //write_float(buffer, &debug_cntr, "context E grad", context_E_grad, j);
+	  //write_float(buffer, &debug_cntr, "negative center word E grad", neg_center_word_E_grad, j);
 	}
 	// add subgradient for postive center word
 	center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
