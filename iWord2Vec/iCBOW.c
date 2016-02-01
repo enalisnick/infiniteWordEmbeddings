@@ -46,7 +46,7 @@ const int table_size = 1e8;
 const double epsilon = 1e-10;
 int *table;
 
-const int EXP_LEN = 200;
+const int EXP_LEN = 87;
 float *exp_table; 
 
 // adadelta variables
@@ -364,9 +364,9 @@ void InitNet() {
 */
 // (unnormProbs_z_given_w_C, pos_context_store, a, pos_context_counter, local_embed_size_plus_one - 1)
 float compute_z_dist(float *dist, long long *context, int center_idx, int context_size, int curr_z) { 
-  float norm = 0.0;
   long long w_idx = context[center_idx] * embed_max_size;
   float window_norm = 1.0/(context_size - 1.0);
+  float max_value = 0.0;
   for (int a = 0; a < curr_z; a++) {
     // precompute context values
     float context_sum = 0;
@@ -384,17 +384,26 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
-    dist[a] = exp_fast(-dist[a]);
-    norm += dist[a];
+    if (-dist[a] > max_value) max_value = -dist[a];
   }
-  dist[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-dist[curr_z]);
-  norm += dist[curr_z];
+  // still need to check last value for max
+  if (-dist[curr_z] > max_value) max_value = -dist[curr_z];
 
-  return norm;
+  return max_value;
 }
 
 void compute_p_z_given_w_C(float *prob_z_given_w_C, float *sum_prob_z_given_w_C, long long *context, int center_idx, int context_size, int curr_z) {
-  float norm = compute_z_dist(prob_z_given_w_C, context, center_idx, context_size, curr_z);
+  float norm = 0.0;
+  float max_value = compute_z_dist(prob_z_given_w_C, context, center_idx, context_size, curr_z);
+  // now exponentiate and normalize                                              
+  for (int a = 0; a < curr_z; a++) {                    
+    prob_z_given_w_C[a] = exp_fast(-prob_z_given_w_C[a]-max_value);          
+    norm += prob_z_given_w_C[a];            
+  }                   
+  prob_z_given_w_C[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-prob_z_given_w_C[curr_z]-max_value);      
+  norm += prob_z_given_w_C[curr_z]; 
+
+  // pre-calculate sums
   float sum = 0.0;
   for (int a = curr_z; a >= 0; a--) {
     prob_z_given_w_C[a] = prob_z_given_w_C[a]/norm;
@@ -407,16 +416,31 @@ void compute_p_z_given_w_C(float *prob_z_given_w_C, float *sum_prob_z_given_w_C,
 //(a, pos_context_store, negative_list, pos_context_counter, negative, prob_w_z_given_C, local_embed_size_plus_one)
 void compute_p_w_z_given_C(long long center_idx, long long *context, long long *negatives, int context_size, int negative_size, float *prob_w_z_given_C, float *sum_prob_w_z_given_C, int curr_z_plus_one) {
   // compute e^(-E(w,c,z)) for z = 1,...,curr_z,curr_z+1 for every context c
-  long long save_true_w = context[center_idx];
   float norm = 0.0;
-  norm += compute_z_dist(prob_w_z_given_C, context, center_idx, context_size, curr_z_plus_one - 1);
+  long long save_true_w = context[center_idx];
+  float max_value = 0.0;
+  float temp_value = 0.0;
+
+  // iterate through once to compute energies and find max value
+  max_value = compute_z_dist(prob_w_z_given_C, context, center_idx, context_size, curr_z_plus_one - 1);
   for (int s = 0; s < negative_size; s++) {
     context[center_idx] = negatives[s];
-    norm += compute_z_dist(prob_w_z_given_C + (s+1) * curr_z_plus_one, context, center_idx, context_size, curr_z_plus_one - 1); 
+    temp_value = compute_z_dist(prob_w_z_given_C + (s+1) * curr_z_plus_one, context, center_idx, context_size, curr_z_plus_one - 1);
+    if (temp_value > max_value) max_value = temp_value;
   }
   // replace true center word
   context[center_idx] = save_true_w;
-  // z_dist_list should now have the prob. of each dim for every context word 
+
+  // now iterate through again to exponentiate and compute norm
+  for (int s = 0; s < negative_size + 1; s++){
+    for (int j = 0; j < curr_z_plus_one-1; j++){
+      prob_w_z_given_C[s*curr_z_plus_one + j] = exp_fast(-prob_w_z_given_C[s*curr_z_plus_one + j]-max_value);
+      norm += prob_w_z_given_C[s*curr_z_plus_one + j];
+    }
+    prob_w_z_given_C[s*curr_z_plus_one + curr_z_plus_one-1] = (dim_penalty / (dim_penalty - 1.0)) * 
+      exp_fast(-prob_w_z_given_C[s*curr_z_plus_one + curr_z_plus_one-1]-max_value);
+    norm += prob_w_z_given_C[s*curr_z_plus_one + curr_z_plus_one-1];
+  }
   
   // compute prob
   for (int s = 0; s < negative_size + 1; s++) {
