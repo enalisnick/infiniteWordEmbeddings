@@ -760,9 +760,7 @@ void *TrainModelThread(void *thread_id) {
     write_arr(buffer, &debug_cntr, "sum p(w,z|C)", sum_prob_w_z_given_C, 2, negative + 1, local_embed_size_plus_one);
 
     // compute p(w|c1...cK) 
-    float log_prob_wi_given_C = 0.0;
-    // NOTE: since the center word is in the first position of prob_wi_z_given_C[idx], just used the idx
-    for (int idx = 0; idx < local_embed_size_plus_one; idx++) log_prob_wi_given_C += prob_w_z_given_C[idx];
+    float log_prob_wi_given_C = sum_prob_w_z_given_C[0];
     if (log_prob_wi_given_C < epsilon){
       printf("WARNING: p(w|C) is below epsilon padding: %.12f \n", log_prob_wi_given_C);
       fflush(stdout);
