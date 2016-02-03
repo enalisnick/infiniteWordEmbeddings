@@ -89,13 +89,13 @@ float exp_fast(float x) {
   float exp_table_val = 0.0;
   if (x_int < -EXP_LEN) {
     exp_table_val = exp_table[0];
-    printf("WARNING: value %d under the MIN value in the exp table (-%d)\n", x_int, EXP_LEN);
-    fflush(stdout);
+    //printf("WARNING: value %d under the MIN value in the exp table (-%d)\n", x_int, EXP_LEN);
+    //fflush(stdout);
   } 
   else if (x_int > EXP_LEN) {
     exp_table_val = exp_table[2*EXP_LEN];
-    printf("WARNING: value %d over the MAX value in the exp table (%d)\n", x_int, EXP_LEN);
-    fflush(stdout);
+    //printf("WARNING: value %d over the MAX value in the exp table (%d)\n", x_int, EXP_LEN);
+    //fflush(stdout);
   }
   else {
     exp_table_val = exp_table[x_int + EXP_LEN];
