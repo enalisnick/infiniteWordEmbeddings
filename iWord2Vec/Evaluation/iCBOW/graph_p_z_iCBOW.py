@@ -106,7 +106,7 @@ if __name__ == '__main__':
     k = 15000 # truncate the vocabulary to the top k most frequent words
     sparsity = 0.0
     dim_penalty = 0.0
-    help_message = 'graph_p_z_iCBOW.py -r <path to directory containing embedding files> -c <comma separated list of (context) words to plot. multiple contexts separated by semicolons>'
+    help_message = 'graph_p_z_iCBOW.py -r <path to directory containing embedding files> -c <comma separated list of (context) words to plot. multiple contexts separated by periods>'
 
     # read in command line arguments
     input_embedding_file = ""
@@ -129,7 +129,7 @@ if __name__ == '__main__':
         elif opt in ("-r", "--rootDir"):
             rootDir = arg 
         elif opt in ("-c", "--context"):
-            for a in arg.split(';'):
+            for a in arg.split('.'):
                 context_to_plot.append(a.split(','))
  
     # extract dim and sparsity penalties from file names
