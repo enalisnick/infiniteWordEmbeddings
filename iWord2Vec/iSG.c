@@ -45,7 +45,7 @@ const int table_size = 1e8;
 const double epsilon = 1e-8;
 int *table;
 
-const int EXP_LEN = 100;
+const int EXP_LEN = 87;
 float *exp_table; 
 
 // adadelta variables
