@@ -392,11 +392,13 @@ void compute_p_z_given_w_c(float *prob_z_given_w_c, float *sum_prob_z_given_w_c,
     norm += prob_z_given_w_c[i];
   }  
   prob_z_given_w_c[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-prob_z_given_w_c[curr_z] - max_value);
+  norm += prob_z_given_w_c[curr_z];
 
   // pre-calculate sums
   float sum = 0.0;
   for (int i = curr_z; i >= 0; i--) {
-    sum += prob_z_given_w_c[i]/norm;
+    prob_z_given_w_c[i] = prob_z_given_w_c[i]/norm;
+    sum += prob_z_given_w_c[i];
     sum_prob_z_given_w_c[i] = sum;
   }
 }
