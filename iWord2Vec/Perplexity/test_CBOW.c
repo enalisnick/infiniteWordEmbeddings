@@ -217,7 +217,7 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
   unsigned long long next_random = 1;
   long long a, b, d, c, word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long sen[MAX_SENTENCE_LENGTH + 1];
-  long long input_word_position, center_word;
+  long long input_word_position, center_word, center_word_position;
   
   // stores negative constext
   long long *neg_context = (long long *) calloc(negative, sizeof(long long)); 
@@ -321,8 +321,9 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
         temp_sum += -input_embed[center_word_position + idx]*context_embed[context_word_position + idx];
       }
     }
-    Z += exp_fast(window_normalization * -temp_sum);
-    prob_w_C = log((temp_sum/Z) + epsilon);  
+    prob_w_C = exp_fast(window_normalization * -temp_sum);
+    Z += prob_w_C;
+    prob_w_C /= Z;  
 
     log_prob_current_context += log(prob_w_C + epsilon); 
     total_log_prob += log_prob_current_context;
