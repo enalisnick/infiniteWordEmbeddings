@@ -48,10 +48,11 @@ int *table;
 const int EXP_LEN = 87;
 float *exp_table; 
 
-// leraning rate variables
-int learning_rate_flag = 0; // 1 if we want to use per-dim learning rates, 0 for regular SGD, 2 for sweeps
-int M = 0.0; // training proportion
+// learning rate variables
+int learning_rate_flag = 0; // 0 for regular SGD, 1 for per dimension, 2 for chi squared sweeps, 3 for linear sweeps
+int M = 0.0; // training proportion * current embedding size
 float X_1_3 = 0.0;
+float beta = 0.9;
 
 // max debug string size
 const int MAX_DEBUG_SIZE = 10000;
@@ -569,7 +570,11 @@ void print_args() {
   printf("Context window size: %d\n", window); 
   printf("Num. of negative samples: %d\n", negative); 
   printf("Training iterations (epochs): %lld\n", iter); 
-  printf("Learning rate: %f\n", (float)alpha ); 
+  printf("Base learning rate (alpha): %f\n", (float)alpha );
+  if (learning_rate_flag == 1) printf("\tOptimization type: per-dimension learning rate\n");
+  else if (learning_rate_flag == 2) printf("\tOptimization type: linear sweeping.  beta = %f \n",beta);
+  else if (learning_rate_flag == 3) printf("\tOptimization type: Chi-Squared sweeping.\n");
+  else printf("\tOptimization type: vanilla SGD.  No special per-dimension learning.\n");
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
   printf("Sparsity weight: %f\n", (float)sparsity_weight);
   printf("#####################\n");
@@ -592,8 +597,8 @@ void save_vectors(char *output_file, long long int vocab_size, long long int emb
 }
 
 float chi_squ_pdf(int x, int k){
-  if (x <= 0) return 0.0;
-  return ( pow(x,k/2.0 - 1) * exp_fast(-x/2.0) ) / (pow(2,k/2.0) * tgamma(k/2.0));
+  if (x < 0) return 0.0;
+  return ( pow(x,k/2.0 - 1) * exp_fast(-x/2.0) ) / ( pow(2,k/2.0) * tgamma(k/2.0) );
 }
 
 void *TrainModelThread(void *thread_id) {
@@ -641,13 +646,23 @@ void *TrainModelThread(void *thread_id) {
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
-      // calculate floor of dims * (train progress percentage)
-      M = (int)((word_count_actual / (real)(iter * train_words + 1))*embed_current_size);
+      if (learning_rate_flag == 1){
+        for (c = 0; c < embed_current_size; c++){
+          alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words - alpha_count_adjustment[c] + 1));
+          if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
+        }
+      }
+      else if (learning_rate_flag == 2 || learning_rate_flag == 3) M = (int)((word_count_actual / (real)(iter * train_words + 1)) * embed_current_size);
+      else {
+	alpha = starting_alpha * (1 - word_count_actual / (real)(iter * train_words + 1));
+        if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
+      }
       if ((debug_mode > 1)) {
         now=clock();
 	float lr = alpha;
 	if (learning_rate_flag == 1) lr = alpha_per_dim[embed_current_size-1];
 	else if (learning_rate_flag == 2) lr = alpha * (chi_squ_pdf(embed_current_size, M+3) / X_1_3);
+	else if (learning_rate_flag == 3) lr = alpha * pow( beta, embed_current_size - M - 1);
         printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, lr,
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
@@ -657,16 +672,6 @@ void *TrainModelThread(void *thread_id) {
 	printf("curr dim: %lld\n", embed_current_size);	
         fflush(stdout);
         train_log_probability = 0.0;
-      }
-      if (learning_rate_flag == 0){
-	alpha = starting_alpha * (1 - word_count_actual / (real)(iter * train_words + 1));
-	if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
-      }
-      else if (learning_rate_flag == 1){
-	for (c = 0; c < embed_current_size; c++){
-	  alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words - alpha_count_adjustment[c] + 1));
-	  if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
-	}
       }
     }
 
@@ -851,6 +856,10 @@ void *TrainModelThread(void *thread_id) {
       float lr = alpha;
       if (learning_rate_flag == 1) lr = alpha_per_dim[j];
       else if (learning_rate_flag == 2) lr = alpha * (chi_squ_pdf(j+1, M+3) / X_1_3);
+      else if (learning_rate_flag == 3){
+	if (j+1 < M) continue;
+	lr = alpha * pow( beta, j+1 - M - 1);
+      } 
       for (int k = 0; k < pos_context_counter; k++){
 	context_word_position = pos_context_store[k] * embed_max_size;
 	check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j, buffer, debug_cntr, DEBUG);
@@ -1008,9 +1017,11 @@ int main(int argc, char **argv) {
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
     printf("\t-optimizeType <int>\n");
-    printf("\t\tFlag that, if equal to zero, performs vanialla SGD; if one, uses per-dim learning rates and schedules; if two, uses sweep units.\n");
+    printf("\t\tFlag that, if equal to zero, performs vanialla SGD; if one, uses per-dim learning rates and schedules; if two, uses Chi-Squared sweep units; if three, uses linear sweeping.\n");
+    printf("\t-beta <float>\n");
+    printf("\t\tParameter of linear sweep: learning rate = alpha * beta^(d-M-1).\n");
     printf("\nExamples:\n");
-    printf("./iW2V -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 5 -maxSize 750 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
+    printf("./iCBOW -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 10 -maxSize 750 -window 6 -negative 5 -numSamples 5 -iter 1 -sparsityWeight 0.000001 -dimPenalty 1.075 -alpha 0.05 -optimizeType 1\n\n");
     return 0;
   }
   output_file[0] = 0;
@@ -1035,6 +1046,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-numSamples", argc, argv)) >0 ) num_z_samples = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-optimizeType", argc, argv)) >0 ) learning_rate_flag = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-beta", argc, argv)) > 0) beta = atof(argv[i+1]);
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
   print_args();
