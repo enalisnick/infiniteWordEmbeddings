@@ -498,8 +498,7 @@ void write_to_file(char buffer[][MAX_STR_SIZE], int debug_cntr, char *debug_file
   fclose(debug_file);
 }
 
-void check_value(float val, char *name, int idx, char buffer[][MAX_STR_SIZE], 
-  int debug_cntr, char *debug_filename) {
+void check_value(float val, char *name, int idx){ //, char buffer[][MAX_STR_SIZE],int debug_cntr, char *debug_filename) {
   if (isnan(val) || isinf(val)) { 
     printf("-------------------------\n");
     if (isnan(val)) printf("NAN!\n");
@@ -508,7 +507,7 @@ void check_value(float val, char *name, int idx, char buffer[][MAX_STR_SIZE],
     printf("idx: %d, name=%s, val=%f\n", idx, name, val);
     printf("-------------------------\n");
     fflush(stdout);
-    write_to_file(buffer, debug_cntr, debug_filename);
+    //write_to_file(buffer, debug_cntr, debug_filename);
     exit(1);
   }
 }
@@ -607,10 +606,10 @@ void *TrainModelThread(void *thread_id) {
   printf("%ld\n", id);
   
   // Debug file
-  char DEBUG[13];
-  sprintf(DEBUG, "debug_%d.txt", (int)id);
-  int debug_cntr = 0;
-  char buffer[MAX_DEBUG_SIZE][MAX_STR_SIZE + 1];  // max string size is 499 
+  //char DEBUG[13];
+  //sprintf(DEBUG, "debug_%d.txt", (int)id);
+  //int debug_cntr = 0;
+  //char buffer[MAX_DEBUG_SIZE][MAX_STR_SIZE + 1];  // max string size is 499 
 
   long long a, b, d, word, center_word, last_word, negative_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1], pos_context_counter;
@@ -642,7 +641,7 @@ void *TrainModelThread(void *thread_id) {
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 500000) { // TODO: lowered for debugging
+    if (word_count - last_word_count > 5000) { // TODO: lowered for debugging
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -837,8 +836,7 @@ void *TrainModelThread(void *thread_id) {
 	  gradient[k*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] 
               * window_normalization * context_E_grad;
 	  // add to gradient for negative example 
-	  check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j,
-            buffer, debug_cntr, DEBUG);
+	  check_value((sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * neg_center_word_E_grad), "neg center word gradient", j);
 	  neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
 	}
 	// add subgradient for postive center word
@@ -862,7 +860,7 @@ void *TrainModelThread(void *thread_id) {
       } 
       for (int k = 0; k < pos_context_counter; k++){
 	context_word_position = pos_context_store[k] * embed_max_size;
-	check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j, buffer, debug_cntr, DEBUG);
+	check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j); //, buffer, debug_cntr, DEBUG);
 	if (k == input_word_position){
 	  input_embed[context_word_position + j] -= lr * gradient[k*local_embed_size_plus_one + j];
 	} else{
@@ -918,12 +916,8 @@ void TrainModel() {
   log_dim_penalty = log(dim_penalty);
   // compute exp table
   build_exp_table(); 
-  
   // compute Chi Squared sweeps normalizer
   X_1_3 = ( pow(1,3/2.0 - 1) * exp_fast(-1/2.0) ) / (pow(2,3/2.0) * tgamma(3/2.0));
-
-  // expanded-dim training for desired epochs
-  printf("Training expanded dim model for %lld iters \n", iter);
   
   for (long a = 0; a < num_threads; a++) {
     pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
