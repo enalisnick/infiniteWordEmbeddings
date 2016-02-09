@@ -836,18 +836,20 @@ void *TrainModelThread(void *thread_id) {
 
     // MAKE FINAL GRAD UPDATES
     for (int j = 0; j < loop_bound; j++){
+      float lr = alpha;
+      if (learning_rate_flag == 1) lr = alpha_per_dim[j];
       for (int k = 0; k < pos_context_counter; k++){
 	context_word_position = pos_context_store[k] * embed_max_size;
 	check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j, buffer, debug_cntr, DEBUG);
 	if (k == input_word_position){
-	  input_embed[context_word_position + j] -= alpha_per_dim[j] * gradient[k*local_embed_size_plus_one + j];
+	  input_embed[context_word_position + j] -= lr * gradient[k*local_embed_size_plus_one + j];
 	} else{
-	  context_embed[context_word_position + j] -= alpha_per_dim[j] * gradient[k*local_embed_size_plus_one + j];
+	  context_embed[context_word_position + j] -= lr * gradient[k*local_embed_size_plus_one + j];
 	}
       }
       for (int d = 0; d < negative; d++) {
 	neg_center_word_position = negative_list[d] * embed_max_size; 
-	input_embed[neg_center_word_position + j] -= alpha_per_dim[j] * neg_gradient[d*local_embed_size_plus_one + j];
+	input_embed[neg_center_word_position + j] -= lr * neg_gradient[d*local_embed_size_plus_one + j];
       }
     }
 
