@@ -572,8 +572,8 @@ void print_args() {
   printf("Training iterations (epochs): %lld\n", iter); 
   printf("Base learning rate (alpha): %f\n", (float)alpha );
   if (learning_rate_flag == 1) printf("\tOptimization type: per-dimension learning rate\n");
-  else if (learning_rate_flag == 2) printf("\tOptimization type: linear sweeping.  beta = %f \n",beta);
-  else if (learning_rate_flag == 3) printf("\tOptimization type: Chi-Squared sweeping.\n");
+  else if (learning_rate_flag == 2) printf("\tOptimization type: Chi-Squared sweeping.\n");
+  else if (learning_rate_flag == 3) printf("\tOptimization type: linear sweeping.  beta = %f .\n", beta);
   else printf("\tOptimization type: vanilla SGD.  No special per-dimension learning.\n");
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
   printf("Sparsity weight: %f\n", (float)sparsity_weight);
