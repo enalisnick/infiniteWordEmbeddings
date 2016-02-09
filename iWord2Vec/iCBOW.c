@@ -661,7 +661,10 @@ void *TrainModelThread(void *thread_id) {
 	float lr = alpha;
 	if (learning_rate_flag == 1) lr = alpha_per_dim[embed_current_size-1];
 	else if (learning_rate_flag == 2) lr = alpha * (chi_squ_pdf(1, M+3) / X_1_3);
-	else if (learning_rate_flag == 3) lr = alpha * pow( beta, embed_current_size - M - 1);
+	else if (learning_rate_flag == 3) {
+	  if (1 < M) lr = 0.0;
+	  else lr = alpha * pow( beta, 1 - M - 1);
+	}
         printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, lr,
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
