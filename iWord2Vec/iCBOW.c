@@ -50,6 +50,8 @@ float *exp_table;
 
 // leraning rate variables
 int learning_rate_flag = 0; // 1 if we want to use per-dim learning rates, 0 for regular SGD, 2 for sweeps
+int M = 0.0; // training proportion
+float X_1_3 = 0.0;
 
 // max debug string size
 const int MAX_DEBUG_SIZE = 10000;
@@ -589,6 +591,11 @@ void save_vectors(char *output_file, long long int vocab_size, long long int emb
   fclose(fo);
 }
 
+float chi_squ_pdf(int x, int k){
+  if (x <= 0) return 0.0;
+  return ( pow(x,k/2.0 - 1) * exp_fast(-x/2.0) ) / (pow(2,k/2.0) * tgamma(k/2.0));
+}
+
 void *TrainModelThread(void *thread_id) {
   // get thread arguments
   long id = (long) thread_id;
@@ -634,9 +641,14 @@ void *TrainModelThread(void *thread_id) {
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
+      // calculate floor of dims * (train progress percentage)
+      M = (int)((word_count_actual / (real)(iter * train_words + 1))*embed_current_size);
       if ((debug_mode > 1)) {
         now=clock();
-        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha_per_dim[embed_current_size-1],
+	float lr = alpha;
+	if (learning_rate_flag == 1) lr = alpha_per_dim[embed_current_size-1];
+	else if (learning_rate_flag == 2) lr = alpha * (chi_squ_pdf(embed_current_size, M+3) / X_1_3);
+        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, lr,
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
 	global_loss_diff += diff;
@@ -838,6 +850,7 @@ void *TrainModelThread(void *thread_id) {
     for (int j = 0; j < loop_bound; j++){
       float lr = alpha;
       if (learning_rate_flag == 1) lr = alpha_per_dim[j];
+      else if (learning_rate_flag == 2) lr = alpha * (chi_squ_pdf(j+1, M+3) / X_1_3);
       for (int k = 0; k < pos_context_counter; k++){
 	context_word_position = pos_context_store[k] * embed_max_size;
 	check_value(gradient[k*local_embed_size_plus_one + j], "pos_context_gradient", j, buffer, debug_cntr, DEBUG);
@@ -896,7 +909,10 @@ void TrainModel() {
   log_dim_penalty = log(dim_penalty);
   // compute exp table
   build_exp_table(); 
- 
+  
+  // compute Chi Squared sweeps normalizer
+  X_1_3 = ( pow(1,3/2.0 - 1) * exp_fast(-1/2.0) ) / (pow(2,3/2.0) * tgamma(3/2.0));
+
   // expanded-dim training for desired epochs
   printf("Training expanded dim model for %lld iters \n", iter);
   
