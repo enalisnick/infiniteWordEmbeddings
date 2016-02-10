@@ -7,6 +7,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <gsl/gsl_randist.h>
+#include <gsl/gsl_cdf.h>
 
 // Global Variables
 #define MAX_STRING 100
@@ -49,9 +50,8 @@ const int EXP_LEN = 87;
 float *exp_table; 
 
 // learning rate variables
-int learning_rate_flag = 0; // 0 for regular SGD, 1 for per dimension, 2 for chi squared sweeps, 3 for linear sweeps
+int learning_rate_flag = 0; // 0 for regular SGD, 1 for per dimension, 2 for beta cdf sweeps, 3 for linear sweeps
 int M = 0.0; // training proportion * current embedding size
-float X_1_3 = 0.0;
 float beta = 0.9;
 
 // max debug string size
@@ -370,8 +370,8 @@ float compute_z_dist(float *dist, long long *context, int center_idx, int contex
     }
     // compute entergy
     float val = -window_norm*input_embed[w_idx + a]*context_sum 
-      + log_dim_penalty + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
-                + window_norm*sparsity_weight*context_norms;
+      + log_dim_penalty + (sparsity_weight/(a+1))*input_embed[w_idx + a]*input_embed[w_idx + a] 
+      + window_norm*(sparsity_weight/(a+1))*context_norms;
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
@@ -571,7 +571,7 @@ void print_args() {
   printf("Training iterations (epochs): %lld\n", iter); 
   printf("Base learning rate (alpha): %f\n", (float)alpha );
   if (learning_rate_flag == 1) printf("\tOptimization type: per-dimension learning rate\n");
-  else if (learning_rate_flag == 2) printf("\tOptimization type: Chi-Squared sweeping.\n");
+  else if (learning_rate_flag == 2) printf("\tOptimization type: Beta CDF sweeping.\n");
   else if (learning_rate_flag == 3) printf("\tOptimization type: linear sweeping.  beta = %f .\n", beta);
   else printf("\tOptimization type: vanilla SGD.  No special per-dimension learning.\n");
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
@@ -593,11 +593,6 @@ void save_vectors(char *output_file, long long int vocab_size, long long int emb
     fprintf(fo, "\n");
   }
   fclose(fo);
-}
-
-float chi_squ_pdf(int x, int k){
-  if (x < 0) return 0.0;
-  return ( pow(x,k/2.0 - 1) * exp_fast(-x/2.0) ) / ( pow(2,k/2.0) * tgamma(k/2.0) );
 }
 
 void *TrainModelThread(void *thread_id) {
@@ -660,7 +655,7 @@ void *TrainModelThread(void *thread_id) {
         now=clock();
 	float lr = alpha;
 	if (learning_rate_flag == 1) lr = alpha_per_dim[embed_current_size-1];
-	else if (learning_rate_flag == 2) lr = alpha * (chi_squ_pdf(1, M+3) / X_1_3);
+	else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P(1.0/(embed_current_size+1.0), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
 	else if (learning_rate_flag == 3) {
 	  if (1 < M) lr = 0.0;
 	  else lr = alpha * pow( beta, 1 - M - 1);
@@ -800,8 +795,8 @@ void *TrainModelThread(void *thread_id) {
 	if (k == input_word_position) continue; // don't use center word w_i
 	context_word_position = pos_context_store[k] * embed_max_size;
 	for (int j = 0; j < z_samples[m]; j++){
-	  context_E_grad = input_embed[center_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
-	  center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
+	  context_E_grad = input_embed[center_word_position + j] - (sparsity_weight/(j+1))*2*context_embed[context_word_position + j];
+	  center_word_E_grad = context_embed[context_word_position + j] - (sparsity_weight/(j+1))*2*input_embed[center_word_position + j];
 	  gradient[k*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * context_E_grad;
 	  gradient[input_word_position*local_embed_size_plus_one + j] += (1.0/num_z_samples) * ( -log_prob_wi_given_C ) * window_normalization * center_word_E_grad;
 	}
@@ -819,8 +814,8 @@ void *TrainModelThread(void *thread_id) {
       if (k == input_word_position) continue;
       context_word_position = pos_context_store[k] * embed_max_size;
       for (int j = 0; j < loop_bound; j++){
-	context_E_grad = input_embed[center_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
-	center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
+	context_E_grad = input_embed[center_word_position + j] - (sparsity_weight/(j+1))*2*context_embed[context_word_position + j];
+	center_word_E_grad = context_embed[context_word_position + j] - (sparsity_weight/(j+1))*2*input_embed[center_word_position + j];
 	gradient[k*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * sum_probs_z_given_w_C[j] * window_normalization * context_E_grad;
 	gradient[input_word_position*local_embed_size_plus_one + j] += (log_prob_wi_given_C - 1) * sum_probs_z_given_w_C[j] * window_normalization * center_word_E_grad;
       }
@@ -834,8 +829,8 @@ void *TrainModelThread(void *thread_id) {
 	// negative samples subgradient
 	for (d = 0; d < negative; d++){
 	  neg_center_word_position = negative_list[d] * embed_max_size;
-	  context_E_grad = input_embed[neg_center_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
-	  neg_center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[neg_center_word_position + j]; 
+	  context_E_grad = input_embed[neg_center_word_position + j] - (sparsity_weight/(j+1))*2*context_embed[context_word_position + j];
+	  neg_center_word_E_grad = context_embed[context_word_position + j] - (sparsity_weight/(j+1))*2*input_embed[neg_center_word_position + j]; 
 	  gradient[k*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] 
               * window_normalization * context_E_grad;
 	  // add to gradient for negative example 
@@ -843,8 +838,8 @@ void *TrainModelThread(void *thread_id) {
 	  neg_gradient[d*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[(d+1)*local_embed_size_plus_one + j] * window_normalization * neg_center_word_E_grad;
 	}
 	// add subgradient for postive center word
-	center_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[center_word_position + j];
-	context_E_grad = input_embed[center_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j]; 
+	center_word_E_grad = context_embed[context_word_position + j] - (sparsity_weight/(j+1))*2*input_embed[center_word_position + j];
+	context_E_grad = input_embed[center_word_position + j] - (sparsity_weight/(j+1))*2*context_embed[context_word_position + j]; 
 	// add to pos context gradient                              
 	gradient[k*local_embed_size_plus_one + j] += sum_prob_w_z_given_C[j] * window_normalization * context_E_grad;
 	// add to center word grad
@@ -856,7 +851,7 @@ void *TrainModelThread(void *thread_id) {
     for (int j = 0; j < loop_bound; j++){
       float lr = alpha;
       if (learning_rate_flag == 1) lr = alpha_per_dim[j];
-      else if (learning_rate_flag == 2) lr = alpha * (chi_squ_pdf(j+1, M+3) / X_1_3);
+      else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P((j+1.0)/(embed_current_size+1), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
       else if (learning_rate_flag == 3){
 	if (j+1 < M) continue;
 	lr = alpha * pow( beta, j+1 - M - 1);
@@ -919,8 +914,6 @@ void TrainModel() {
   log_dim_penalty = log(dim_penalty);
   // compute exp table
   build_exp_table(); 
-  // compute Chi Squared sweeps normalizer
-  X_1_3 = ( pow(1,3/2.0 - 1) * exp_fast(-1/2.0) ) / (pow(2,3/2.0) * tgamma(3/2.0));
   
   for (long a = 0; a < num_threads; a++) {
     pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
@@ -1014,7 +1007,7 @@ int main(int argc, char **argv) {
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
     printf("\t-optimizeType <int>\n");
-    printf("\t\tFlag that, if equal to zero, performs vanialla SGD; if one, uses per-dim learning rates and schedules; if two, uses Chi-Squared sweep units; if three, uses linear sweeping.\n");
+    printf("\t\tFlag that, if equal to zero, performs vanialla SGD; if one, uses per-dim learning rates and schedules; if two, uses Beta CDF sweep units; if three, uses linear sweeping.\n");
     printf("\t-beta <float>\n");
     printf("\t\tParameter of linear sweep: learning rate = alpha * beta^(d-M-1).\n");
     printf("\nExamples:\n");
