@@ -1,6 +1,8 @@
+import os.path
 from math import exp, log
 from scipy import spatial
 import numpy as np
+import cPickle
 
 ### cosine similarity
 def cosine_sim(v1,v2):
@@ -61,18 +63,47 @@ def get_mode_z_context(v1,c2,sparsity_weight=0.001,dim_penalty=1.1):
                                                                                 
   return z                         
 
+
+def get_matrix(embeddings):
+  n = len(embeddings)
+  k = len(embeddings[0])
+  W = np.zeros(shape=(n, k), dtype='float32')                      
+  for i in range(0,n):                                                      
+    W[i] = embeddings[i]                                                  
+
+  return W
+
 ### get vocab and word-embeddings from file 
 def read_embedding_file(embedding_filename):
-  ### READ EMBEDDINGS FROM TXT FILE
+  txt = ".txt"
+  pckl = ".p"
+  pckl_filename = embedding_filename.replace(txt, pckl)
+  pckl_exists = os.path.isfile(pckl_filename)
   embeddings = []
   vocab = []
-  with open(embedding_filename) as f:
-    for line in f.readlines()[1:]:
-      line = line.strip().split()
-      vocab.append(line[0])
-      embeddings.append([float(x) for x in line[1:]])
  
-  return vocab, embeddings  
+  if pckl_exists:
+    ### read embeddings from pckl file
+    print "loading from pickle file: ", pckl_filename
+    data = cPickle.load(open(pckl_filename,"rb"))
+    vocab, W = data[0], data[1] 
+  elif txt in embedding_filename:
+    ### read embeddings from txt file
+    print "loading from txt file: ", embedding_filename
+    
+    with open(embedding_filename) as f:
+      for line in f.readlines()[1:]:
+        line = line.strip().split()
+        vocab.append(line[0])
+        embeddings.append([float(x) for x in line[1:]])
+   
+    ### save as matrix in pckl file
+    W = get_matrix(embeddings)
+    cPickle.dump([vocab, W], open(pckl_filename, "wb"),-1)  
+  else:
+    print "format not recognized: ", embedding_filename
+
+  return vocab, W 
 
 ### get K nearest neighbors 
 def get_nn(vocab, embeddings, context_embeddings, word, K, num_dims=-1):
