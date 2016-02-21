@@ -313,13 +313,12 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
       Z += prob;
       prob /= Z;
 
-      log_prob_current_context += log(prob + epsilon);
-      
+      log_prob_current_context += log(prob + epsilon); 
     }
     total_log_prob += log_prob_current_context;
     iter += pos_context_counter;
     if (iter % STATUS_INTERVAL == 0)  
-      printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob/iter);
+      printf("Iteration: %ld, Perplexity: %f\n", iter, exp(-total_log_prob/iter));
     fflush(stdout);
 
     sentence_position++;
@@ -331,7 +330,7 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
 
   free(neg_context_store);
   free(pos_context_store);
-  return (total_log_prob/iter);
+  return exp(-total_log_prob/iter);
 }
 
 int main(int argc, char **argv) {
@@ -368,7 +367,7 @@ int main(int argc, char **argv) {
   free(vocab);
   free(vocab_hash);
   printf("-----------------------------------\n");
-  printf("Final Log Probability: %f\n", log_prob);
+  printf("Final Perplexity: %f\n", log_prob);
   fflush(stdout);
   return 0;
 }

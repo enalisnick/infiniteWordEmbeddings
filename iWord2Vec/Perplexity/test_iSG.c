@@ -351,12 +351,6 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
 	d--;
       }
 
-      // CALCULATE NECESSARY PROBABILITIES 
-      // compute p(z|w,c)
-      //compute_p_z_given_w_c(prob_z_given_w_c, sum_prob_z_given_w_c, input_word_position,
-      //  context_word_position, embed_size);
-      
-      // compute p(c,z|w)
       compute_p_c_z_given_w(word, neg_context, prob_c_z_given_w, sum_prob_c_z_given_w, 
         negative+1, embed_size);
 
@@ -365,7 +359,7 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
     }
     total_log_prob += log_prob_current_context;
     iter += pos_context_counter;
-    if (iter % STATUS_INTERVAL == 0) printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob/iter);
+    if (iter % STATUS_INTERVAL == 0) printf("Iteration: %ld, Perplexity: %f\n", iter, exp(-total_log_prob/iter));
     fflush(stdout);
 
     sentence_position++;
@@ -380,7 +374,7 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
   free(sum_prob_z_given_w_c);
   free(prob_c_z_given_w);
   free(sum_prob_c_z_given_w);
-  return (total_log_prob/iter);
+  return exp(-total_log_prob/iter);
 }
 
 int main(int argc, char **argv) {
@@ -420,7 +414,7 @@ int main(int argc, char **argv) {
   free(vocab);
   free(vocab_hash);
   printf("-----------------------------------\n");
-  printf("Final Log Probability: %f\n", log_prob);
+  printf("Final Perplexity: %f\n", log_prob);
   fflush(stdout);
   return 0;
 }

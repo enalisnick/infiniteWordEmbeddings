@@ -329,7 +329,7 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
     total_log_prob += log_prob_current_context;
     iter++;
     
-    if (iter % STATUS_INTERVAL == 0) printf("Iteration: %ld, Log Probability: %f\n", iter, total_log_prob/iter);
+    if (iter % STATUS_INTERVAL == 0) printf("Iteration: %ld, Perplexity: %f\n", iter, exp(-total_log_prob/iter));
     fflush(stdout);
 
     sentence_position++;
@@ -341,7 +341,7 @@ float get_log_prob(char *test_file_name, float *input_embed, float *context_embe
 
   free(pos_context);
   free(neg_context);
-  return (total_log_prob/iter);
+  return exp(-total_log_prob/iter);
 }
 
 int main(int argc, char **argv) {
@@ -358,9 +358,6 @@ int main(int argc, char **argv) {
   strcpy(context_file_name, argv[2]);
   strcpy(test_file_name, argv[3]);
   strcpy(read_vocab_file, argv[4]);
-  sparsity_weight = atof(argv[5]);
-  dim_penalty = atof(argv[6]);
-  log_dim_penalty = log(dim_penalty);
   // log what we read in                                                                                                                                                                                           
   printf("%s\n", input_file_name);
   read_vectors(input_file_name, &vocab_size_local, &embed_size, &vocab_local, &input_embed);
@@ -382,7 +379,7 @@ int main(int argc, char **argv) {
   free(vocab);
   free(vocab_hash);
   printf("-----------------------------------\n");
-  printf("Final Log Probability: %f\n", log_prob);
+  printf("Final Perplexity: %f\n", log_prob);
   fflush(stdout);
   return 0;
 }
