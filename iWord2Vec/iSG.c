@@ -40,6 +40,7 @@ real *input_embed, *context_embed, *alpha_per_dim;
 clock_t start;
 int negative = 5;
 int num_z_samples = 5;
+float temp = 1.0;
 
 const int table_size = 1e8;
 const double epsilon = 1e-8;
@@ -388,10 +389,10 @@ void compute_p_z_given_w_c(float *prob_z_given_w_c, float *sum_prob_z_given_w_c,
   
   // iterate to exponeniate and compute norm
   for (int i = 0; i < curr_z; i++) {
-    prob_z_given_w_c[i] = exp_fast(-prob_z_given_w_c[i] - max_value);
+    prob_z_given_w_c[i] = exp_fast((-prob_z_given_w_c[i] - max_value)/temp);
     norm += prob_z_given_w_c[i];
   }  
-  prob_z_given_w_c[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast(-prob_z_given_w_c[curr_z] - max_value);
+  prob_z_given_w_c[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast((-prob_z_given_w_c[curr_z] - max_value)/temp);
   norm += prob_z_given_w_c[curr_z];
 
   // pre-calculate sums
@@ -408,22 +409,25 @@ void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_g
   float *sum_prob_c_z_given_w, int context_size, int curr_z_plus_one) {
   // compute e^(-E(w,c,z)) for z = 1,...,curr_z,curr_z+1 for every context c
   long long w_idx = word * embed_max_size;
-  float max_value = 0.0, norm = 0.0;
+  float norm = 0.0, max_value = 0.0;
 
   for (int s = 0; s < context_size; s++) {
     long long c_idx = context[s] * embed_max_size;  
     float temp_value = compute_z_dist(prob_c_z_given_w + s * curr_z_plus_one, w_idx, c_idx, curr_z_plus_one - 1); 
-    if (temp_value > max_value)  temp_value = max_value;
+    if (s == 0) max_value = temp_value; 
+    else {
+      if (temp_value > max_value)  max_value = temp_value;
+    }
   }
  
   // iterate to exponentiate and compute norm 
   for (int s = 0; s < context_size; s++) {
     for (int z = 0; z < curr_z_plus_one-1; z++) {
-      prob_c_z_given_w[s*curr_z_plus_one + z] = exp_fast(-prob_c_z_given_w[s*curr_z_plus_one + z] - max_value);
+      prob_c_z_given_w[s*curr_z_plus_one + z] = exp_fast((-prob_c_z_given_w[s*curr_z_plus_one + z] - max_value)/temp);
       norm += prob_c_z_given_w[s*curr_z_plus_one + z];
     }
     prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1] = (dim_penalty / (dim_penalty - 1.0))
-     * exp_fast(-prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1] - max_value);
+     * exp_fast((-prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1] - max_value)/temp);
     norm += prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1];
   }
 
@@ -491,6 +495,7 @@ void check_value(float val, char *name, int idx) {
     printf("idx: %d, name=%s, val=%f\n", idx, name, val);
     printf("-------------------------\n");
     fflush(stdout);
+    exit(1);
   }
 }
 
@@ -516,6 +521,7 @@ void print_args() {
   printf("Learning rate: %f\n", (float)alpha ); 
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
   printf("Sparsity weight: %f\n", (float)sparsity_weight);
+  printf("Temperature: %f\n", temp);
   printf("#####################\n");
   fflush(stdout);
 }
@@ -573,7 +579,7 @@ void *TrainModelThread(void *thread_id) {
   float train_log_probability = 0.0;  // track if model is learning 
   while (1) {
     // track training progress
-    if (word_count - last_word_count > 1000) { // TODO: lowered for debugging
+    if (word_count - last_word_count > 20000) { // TODO: lowered for debugging
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
@@ -735,14 +741,15 @@ void *TrainModelThread(void *thread_id) {
 	  input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	  
           if (d == 0){
-	    pos_context_gradient[j] += sum_prob_c_z_given_w[j] * context_E_grad;
+	    pos_context_gradient[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad;
 	  } else{
 	    // update negative example since this is all we need
-	    check_value((sum_prob_c_z_given_w[j] * context_E_grad), "neg context gradient", j);
-	    context_embed[context_idx + j] -= alpha_per_dim[j] * (sum_prob_c_z_given_w[j] * context_E_grad);
+	    check_value((sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad), "neg context gradient", j);
+	    context_embed[context_idx + j] -= alpha_per_dim[j] * (1.0/temp) 
+              * (sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad);
 	  }
 	  // input_grad_accum just has the normalization grad in it
-	  input_gradient_accumulator[j] += sum_prob_c_z_given_w[j] * input_word_E_grad;
+	  input_gradient_accumulator[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * input_word_E_grad;
 	}
       }
 
@@ -750,14 +757,15 @@ void *TrainModelThread(void *thread_id) {
       for (int j = 0; j < loop_bound; j++){
 	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += input_gradient_accumulator[j]; 
-	input_embed[input_word_position + j] -= alpha_per_dim[j] * input_gradient[j];
+	input_embed[input_word_position + j] -= alpha_per_dim[j] * (1.0/temp) * input_gradient[j];
 	check_value(pos_context_gradient[j], "pos_context_gradient", j);
-        context_embed[context_word_position + j] -= alpha_per_dim[j] * pos_context_gradient[j];
+        context_embed[context_word_position + j] -= alpha_per_dim[j] * (1.0/temp) * pos_context_gradient[j];
       }
 
       // track training progress
       log_prob_per_word += -log_prob_ck_given_w;
       free(prob_c_z_given_w);
+      free(sum_prob_c_z_given_w);
     }
     // end loop over context (indexed by a)
     train_log_probability += (log_prob_per_word)/(pos_context_counter * num_z_samples);
@@ -932,6 +940,8 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-adaDelta", argc, argv)) >0 ) adadelta_flag = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-epsilon", argc, argv)) > 0) epsilon_adadelta = atof(argv[i + 1]);
   if ((i = ArgPos((char *)"-rho", argc, argv)) > 0) rho_adadelta = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-temp", argc, argv)) > 0) temp = atof(argv[i + 1]);
+
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
   print_args();
