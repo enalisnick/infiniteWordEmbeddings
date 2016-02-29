@@ -377,10 +377,10 @@ void compute_p_z_given_w_c(float *prob_z_given_w_c, float *sum_prob_z_given_w_c,
   
   // iterate to exponeniate and compute norm
   for (int i = 0; i < curr_z; i++) {
-    prob_z_given_w_c[i] = exp_fast((-prob_z_given_w_c[i] - max_value));
+    prob_z_given_w_c[i] = exp_fast((-prob_z_given_w_c[i] - max_value)/temperature);
     norm += prob_z_given_w_c[i];
   }  
-  prob_z_given_w_c[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast((-prob_z_given_w_c[curr_z] - max_value));
+  prob_z_given_w_c[curr_z] = (dim_penalty / (dim_penalty - 1.0)) * exp_fast((-prob_z_given_w_c[curr_z] - max_value)/temperature);
   norm += prob_z_given_w_c[curr_z];
 
   // pre-calculate sums
@@ -699,8 +699,8 @@ void *TrainModelThread(void *thread_id) {
 	for (int j = 0; j < z_samples[m]; j++){
 	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
 	  input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
-	  pos_context_gradient[j] += (1.0/num_z_samples) * -log_prob_ck_given_w * (1/temperature) * context_E_grad;
-	  input_gradient[j] += (1.0/num_z_samples) * ( -log_prob_ck_given_w ) * (1/temperature) * input_word_E_grad;
+	  pos_context_gradient[j] += (1.0/num_z_samples) * -log_prob_ck_given_w * context_E_grad;
+	  input_gradient[j] += (1.0/num_z_samples) * ( -log_prob_ck_given_w ) * input_word_E_grad;
 	}
       }
 
@@ -727,7 +727,7 @@ void *TrainModelThread(void *thread_id) {
 	  input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	  
           if (d == 0){
-	    pos_context_gradient[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * (1/temperature) * context_E_grad;
+	    pos_context_gradient[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad;
 	  } else{
 	    // update negative example since this is all we need
 	    check_value((sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad), "neg context gradient", j);
@@ -735,7 +735,7 @@ void *TrainModelThread(void *thread_id) {
               * (sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad);
 	  }
 	  // input_grad_accum just has the normalization grad in it
-	  input_gradient_accumulator[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * (1/temperature) * input_word_E_grad;
+	  input_gradient_accumulator[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * input_word_E_grad;
 	}
       }
 
@@ -743,9 +743,9 @@ void *TrainModelThread(void *thread_id) {
       for (int j = 0; j < loop_bound; j++){
 	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += input_gradient_accumulator[j]; 
-	input_embed[input_word_position + j] -= alpha_per_dim[j] * input_gradient[j];
+	input_embed[input_word_position + j] -= alpha_per_dim[j] * (1.0/temperature) * input_gradient[j];
 	check_value(pos_context_gradient[j], "pos_context_gradient", j);
-        context_embed[context_word_position + j] -= alpha_per_dim[j] * pos_context_gradient[j];
+        context_embed[context_word_position + j] -= alpha_per_dim[j] * (1.0/temperature) * pos_context_gradient[j];
       }
 
       // track training progress
