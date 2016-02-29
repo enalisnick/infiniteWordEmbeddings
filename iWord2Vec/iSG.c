@@ -733,8 +733,11 @@ void *TrainModelThread(void *thread_id) {
 	    pos_context_gradient[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad;
 	  } else{
 	    // update negative example since this is all we need
+	    float lr = alpha;
+	    if (learning_rate_flag == 1) lr = alpha_per_dim[j];
+	    else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P((j+1.0)/(embed_current_size+1), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
 	    check_value((sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad), "neg context gradient", j);
-	    context_embed[context_idx + j] -= alpha_per_dim[j] * (1.0/temperature) 
+	    context_embed[context_idx + j] -= lr * (1.0/temperature) 
               * (sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad);
 	  }
 	  // input_grad_accum just has the normalization grad in it
@@ -749,9 +752,9 @@ void *TrainModelThread(void *thread_id) {
 	else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P((j+1.0)/(embed_current_size+1), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
 	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += input_gradient_accumulator[j]; 
-	input_embed[input_word_position + j] -= alpha_per_dim[j] * (1.0/temperature) * input_gradient[j];
+	input_embed[input_word_position + j] -= lr * (1.0/temperature) * input_gradient[j];
 	check_value(pos_context_gradient[j], "pos_context_gradient", j);
-        context_embed[context_word_position + j] -= alpha_per_dim[j] * (1.0/temperature) * pos_context_gradient[j];
+        context_embed[context_word_position + j] -= lr * (1.0/temperature) * pos_context_gradient[j];
       }
 
       // track training progress
