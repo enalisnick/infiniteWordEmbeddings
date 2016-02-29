@@ -40,7 +40,7 @@ real *input_embed, *context_embed, *alpha_per_dim;
 clock_t start;
 int negative = 5;
 int num_z_samples = 5;
-float temp = 1.0;
+float temperature = 1.0;
 
 const int table_size = 1e8;
 const double epsilon = 1e-8;
@@ -48,12 +48,6 @@ int *table;
 
 const int EXP_LEN = 87;
 float *exp_table; 
-
-// adadelta variables
-int adadelta_flag = 0; // 1 if we want to use AdaDelta, 0 for regular SGD
-float *input_grad_history, *context_grad_history;
-float rho_adadelta = 0.95; // taken from adadelta paper
-float epsilon_adadelta = 0.1; // taken from https://github.com/jeevanshankar1991/Word2Vec
 
 /*
   Build table which precompute exp function for certain integer
@@ -335,12 +329,6 @@ void InitNet() {
 	input_embed[a * embed_max_size + b] = 0.0;
       }
   }
-  
-  // intialize gradient history vectors if using adadelta 
-  if (adadelta_flag == 1){
-    input_grad_history = calloc(vocab_size * embed_max_size, sizeof(float)); 
-    context_grad_history = calloc(vocab_size * embed_max_size, sizeof(float));
-  }
 
   // initialize per dimension learning rate array
   alpha_per_dim = (real *) calloc(embed_max_size, sizeof(real));
@@ -423,11 +411,11 @@ void compute_p_c_z_given_w(long long word, long long *context, float *prob_c_z_g
   // iterate to exponentiate and compute norm 
   for (int s = 0; s < context_size; s++) {
     for (int z = 0; z < curr_z_plus_one-1; z++) {
-      prob_c_z_given_w[s*curr_z_plus_one + z] = exp_fast((-prob_c_z_given_w[s*curr_z_plus_one + z] - max_value)/temp);
+      prob_c_z_given_w[s*curr_z_plus_one + z] = exp_fast((-prob_c_z_given_w[s*curr_z_plus_one + z] - max_value)/temperature);
       norm += prob_c_z_given_w[s*curr_z_plus_one + z];
     }
     prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1] = (dim_penalty / (dim_penalty - 1.0))
-     * exp_fast((-prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1] - max_value)/temp);
+     * exp_fast((-prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1] - max_value)/temperature);
     norm += prob_c_z_given_w[s*curr_z_plus_one + curr_z_plus_one-1];
   }
 
@@ -521,7 +509,7 @@ void print_args() {
   printf("Learning rate: %f\n", (float)alpha ); 
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
   printf("Sparsity weight: %f\n", (float)sparsity_weight);
-  printf("Temperature: %f\n", temp);
+  printf("Temperature: %f\n", temperature);
   printf("#####################\n");
   fflush(stdout);
 }
@@ -595,11 +583,9 @@ void *TrainModelThread(void *thread_id) {
         fflush(stdout);
         train_log_probability = 0.0;
       }
-      if (adadelta_flag != 1){
-	for (c = 0; c < embed_current_size; c++){
-	  alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words - alpha_count_adjustment[c] + 1));
-	  if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
-	}
+      for (c = 0; c < embed_current_size; c++){
+	alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words - alpha_count_adjustment[c] + 1));
+	if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
       }
     }
     // read a new sentence / line
@@ -713,8 +699,8 @@ void *TrainModelThread(void *thread_id) {
 	for (int j = 0; j < z_samples[m]; j++){
 	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
 	  input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
-	  pos_context_gradient[j] += (1.0/num_z_samples) * -log_prob_ck_given_w * context_E_grad;
-	  input_gradient[j] += (1.0/num_z_samples) * ( -log_prob_ck_given_w ) * input_word_E_grad;
+	  pos_context_gradient[j] += (1.0/num_z_samples) * -log_prob_ck_given_w * (1/temperature) * context_E_grad;
+	  input_gradient[j] += (1.0/num_z_samples) * ( -log_prob_ck_given_w ) * (1/temperature) * input_word_E_grad;
 	}
       }
 
@@ -741,15 +727,15 @@ void *TrainModelThread(void *thread_id) {
 	  input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
 	  
           if (d == 0){
-	    pos_context_gradient[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad;
+	    pos_context_gradient[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * (1/temperature) * context_E_grad;
 	  } else{
 	    // update negative example since this is all we need
 	    check_value((sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad), "neg context gradient", j);
-	    context_embed[context_idx + j] -= alpha_per_dim[j] * (1.0/temp) 
+	    context_embed[context_idx + j] -= alpha_per_dim[j] * (1.0/temperature) 
               * (sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad);
 	  }
 	  // input_grad_accum just has the normalization grad in it
-	  input_gradient_accumulator[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * input_word_E_grad;
+	  input_gradient_accumulator[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * (1/temperature) * input_word_E_grad;
 	}
       }
 
@@ -757,9 +743,9 @@ void *TrainModelThread(void *thread_id) {
       for (int j = 0; j < loop_bound; j++){
 	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += input_gradient_accumulator[j]; 
-	input_embed[input_word_position + j] -= alpha_per_dim[j] * (1.0/temp) * input_gradient[j];
+	input_embed[input_word_position + j] -= alpha_per_dim[j] * input_gradient[j];
 	check_value(pos_context_gradient[j], "pos_context_gradient", j);
-        context_embed[context_word_position + j] -= alpha_per_dim[j] * (1.0/temp) * pos_context_gradient[j];
+        context_embed[context_word_position + j] -= alpha_per_dim[j] * pos_context_gradient[j];
       }
 
       // track training progress
@@ -822,10 +808,6 @@ void TrainModel() {
 
   // free globally used space
   free(exp_table);
-  if (adadelta_flag == 1){
-    free(input_grad_history);
-    free(context_grad_history);
-  }
   free(alpha_count_adjustment);
   free(alpha_per_dim);
   free(input_embed);
@@ -906,12 +888,8 @@ int main(int argc, char **argv) {
     printf("\t\tThe vocabulary will be saved to <file>\n");
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
-    printf("\t-adaDelta <int>\n");
-    printf("\t\tFlag that, if equal to one, sets the learning rate according to the AdaDelta adaptive gradient procedure.\n");
-    printf("\t-epsilon <float>\n");
-    printf("\t\tSmall value added to the denominator of the AdaDelta ratio for stability purposes.  Default: 0.1\n");
-    printf("\t-rho <float>\n");
-    printf("\t\tValue for AdaDelta's geometric average (rho)*grad_history + (1-rho)*grad^2.  Default: 0.95\n");
+    printf("\t-temperature <float>\n");
+    printf("\t\tTemperature of the softmax used to calculate probabilities.  Default: 1.0 \n");
     printf("\nExamples:\n");
     printf("./iW2V -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 5 -maxSize 750 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
     return 0;
@@ -937,10 +915,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-numSamples", argc, argv)) >0 ) num_z_samples = atoi(argv[i + 1]);
-  if ((i = ArgPos((char *)"-adaDelta", argc, argv)) >0 ) adadelta_flag = atoi(argv[i + 1]);
-  if ((i = ArgPos((char *)"-epsilon", argc, argv)) > 0) epsilon_adadelta = atof(argv[i + 1]);
-  if ((i = ArgPos((char *)"-rho", argc, argv)) > 0) rho_adadelta = atof(argv[i + 1]);
-  if ((i = ArgPos((char *)"-temp", argc, argv)) > 0) temp = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-temperature", argc, argv)) > 0) temperature = atof(argv[i + 1]);
 
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
