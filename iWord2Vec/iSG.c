@@ -6,6 +6,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <gsl/gsl_randist.h>
+#include <gsl/gsl_cdf.h>
 //#include "Evaluation/eval_lib.h"
 
 // Global Variables
@@ -41,6 +42,10 @@ clock_t start;
 int negative = 5;
 int num_z_samples = 5;
 float temperature = 1.0;
+
+// learning rate variables
+int learning_rate_flag = 0; // 0 for regular SGD, 1 for per dimension, 2 for beta cdf sweeps
+int M = 0.0; // training proportion * current embedding size
 
 const int table_size = 1e8;
 const double epsilon = 1e-8;
@@ -336,17 +341,6 @@ void InitNet() {
   alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
 }
 
-// function to compute E(w, c, z)
-float compute_energy(long long w_idx, long long c_idx, int z){
-  long long a;
-  float energy = 0.0;
-  for (a = 0; a<z; a++) energy += 
-    -input_embed[w_idx + a]*context_embed[c_idx + a] + log_dim_penalty 
-    + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx+a] 
-    + sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
-  return energy;
-}
-
 /*
   Compute e^(-E(w,c,z)) for z=1,...,curr_z,curr_z+1  
   -> dist: float array to fill; should be of size curr_z+1 
@@ -358,8 +352,8 @@ float compute_z_dist(float *dist, long long w_idx, long long c_idx, int curr_z) 
   float max_value = 0.0;
   for (int a = 0; a < curr_z; a++) {
     float val = -input_embed[w_idx + a]*context_embed[c_idx + a] 
-                +log_dim_penalty + sparsity_weight*input_embed[w_idx + a]*input_embed[w_idx + a] 
-                +sparsity_weight*context_embed[c_idx + a]*context_embed[c_idx+a];
+      +log_dim_penalty + sparsity_weight/(a+1) * input_embed[w_idx + a]*input_embed[w_idx + a] 
+      + sparsity_weight/(a+1) * context_embed[c_idx + a]*context_embed[c_idx+a];
     for (int b = a; b <= curr_z; b++) {
       dist[b] += val;
     }
@@ -505,8 +499,11 @@ void print_args() {
   printf("Max dimensionality: %lld\n", embed_max_size); 
   printf("Context window size: %d\n", window); 
   printf("Num. of negative samples: %d\n", negative); 
-  printf("Training iterations (epochs): %lld\n", iter); 
-  printf("Learning rate: %f\n", (float)alpha ); 
+  printf("Training iterations (epochs): %lld\n", iter);
+  if (learning_rate_flag == 1) printf("\tOptimization type: per-dimension learning rate\n");
+  else if (learning_rate_flag == 2) printf("\tOptimization type: Beta CDF sweeping.\n");
+  else printf("\tOptimization type: vanilla SGD.  No special per-dimension learning.\n");
+  printf("Base learning rate: %f\n", (float)alpha ); 
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
   printf("Sparsity weight: %f\n", (float)sparsity_weight);
   printf("Temperature: %f\n", temperature);
@@ -571,9 +568,19 @@ void *TrainModelThread(void *thread_id) {
       long long diff = word_count - last_word_count;
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
+      if (learning_rate_flag == 1){
+        for (c = 0; c < embed_current_size; c++){
+          alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words - alpha_count_adjustment[c] + 1));
+          if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
+        }
+      }
+      else if (learning_rate_flag == 2 || learning_rate_flag == 3) M = (int)((word_count_actual / (real)(iter * train_words + 1)) * embed_current_size);
       if ((debug_mode > 1)) {
         now=clock();
-        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha_per_dim[embed_current_size-1],
+	float lr = alpha;
+	if (learning_rate_flag == 1) lr = alpha_per_dim[embed_current_size-1];
+	else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P(1.0/(embed_current_size+1.0), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
+        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, lr,
 	       word_count_actual / (real)(iter * train_words + 1) * 100,
 	       word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
 	global_loss_diff += diff;
@@ -582,10 +589,6 @@ void *TrainModelThread(void *thread_id) {
 	printf("curr dim: %lld\n", embed_current_size);	
         fflush(stdout);
         train_log_probability = 0.0;
-      }
-      for (c = 0; c < embed_current_size; c++){
-	alpha_per_dim[c] = starting_alpha * (1 - (word_count_actual - alpha_count_adjustment[c]) / (real)(iter * train_words - alpha_count_adjustment[c] + 1));
-	if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
       }
     }
     // read a new sentence / line
@@ -697,8 +700,8 @@ void *TrainModelThread(void *thread_id) {
       // ONLY NEED TO CALC FOR PREDICTION PART OF GRAD
       for (int m = 0; m < num_z_samples; m++) { 
 	for (int j = 0; j < z_samples[m]; j++){
-	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
-	  input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
+	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight/(j+1) * 2*context_embed[context_word_position + j];
+	  input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight/(j+1) * 2*input_embed[input_word_position + j];
 	  pos_context_gradient[j] += (1.0/num_z_samples) * -log_prob_ck_given_w * context_E_grad;
 	  input_gradient[j] += (1.0/num_z_samples) * ( -log_prob_ck_given_w ) * input_word_E_grad;
 	}
@@ -712,8 +715,8 @@ void *TrainModelThread(void *thread_id) {
 
       // CALC DIMENSION GRADIENT TERM FOR POS & INPUT
       for (int j = 0; j < loop_bound; j++){
-	context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_word_position + j];
-	input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight*2*input_embed[input_word_position + j];
+	context_E_grad = input_embed[input_word_position + j] - sparsity_weight/(j+1) * 2*context_embed[context_word_position + j];
+	input_word_E_grad = context_embed[context_word_position + j] - sparsity_weight/(j+1) * 2*input_embed[input_word_position + j];
 	
         input_gradient[j] += (log_prob_ck_given_w - 1) * sum_prob_z_given_w_c[j] * input_word_E_grad;
 	pos_context_gradient[j] += (log_prob_ck_given_w - 1) * sum_prob_z_given_w_c[j] * context_E_grad;
@@ -723,8 +726,8 @@ void *TrainModelThread(void *thread_id) {
       for (int j = 0; j < loop_bound; j++){
 	for (d = 0; d < negative + 1; d++){
 	  long long context_idx = context_list[d]*embed_max_size;
-	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight*2*context_embed[context_idx + j];
-	  input_word_E_grad = context_embed[context_idx + j] - sparsity_weight*2*input_embed[input_word_position + j];
+	  context_E_grad = input_embed[input_word_position + j] - sparsity_weight/(j+1) * 2*context_embed[context_idx + j];
+	  input_word_E_grad = context_embed[context_idx + j] - sparsity_weight/(j+1) * 2*input_embed[input_word_position + j];
 	  
           if (d == 0){
 	    pos_context_gradient[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad;
@@ -741,6 +744,9 @@ void *TrainModelThread(void *thread_id) {
 
       // MAKE FINAL GRAD UPDATES
       for (int j = 0; j < loop_bound; j++){
+	float lr = alpha;
+	if (learning_rate_flag == 1) lr = alpha_per_dim[j];
+	else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P((j+1.0)/(embed_current_size+1), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
 	check_value(input_gradient[j], "input_gradient", j);
         input_gradient[j] += input_gradient_accumulator[j]; 
 	input_embed[input_word_position + j] -= alpha_per_dim[j] * (1.0/temperature) * input_gradient[j];
@@ -890,6 +896,8 @@ int main(int argc, char **argv) {
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
     printf("\t-temperature <float>\n");
     printf("\t\tTemperature of the softmax used to calculate probabilities.  Default: 1.0 \n");
+    printf("\t-optimizeType <int>\n");
+    printf("\t\tFlag that, if equal to zero, performs vanialla SGD; if one, uses per-dim learning rates and schedules; if two, uses Beta CDF sweeps.\n");
     printf("\nExamples:\n");
     printf("./iW2V -train data.txt -output w_vec.txt -contextOutput c_vec.txt -initSize 5 -maxSize 750 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
     return 0;
@@ -915,6 +923,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-numSamples", argc, argv)) >0 ) num_z_samples = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-optimizeType", argc, argv)) >0 ) learning_rate_flag = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-temperature", argc, argv)) > 0) temperature = atof(argv[i + 1]);
 
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
