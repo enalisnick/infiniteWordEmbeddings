@@ -74,9 +74,9 @@ def train_conv_net(datasets,
     index = T.lscalar()
     x = T.matrix('x')   
     y = T.ivector('y')
-    Words = theano.shared(value = U, name = "Words")
+    Words = theano.shared(value = as_floatX(U), name = "Words")
     zero_vec_tensor = T.vector()
-    zero_vec = np.zeros(img_w)
+    zero_vec = np.zeros(img_w, dtype='float32')
     set_zero = theano.function([zero_vec_tensor], updates=[(Words, T.set_subtensor(Words[0,:], zero_vec_tensor))])
     layer0_input = Words[T.cast(x.flatten(),dtype="int32")].reshape((x.shape[0],1,x.shape[1],Words.shape[1]))                                  
     conv_layers = []
@@ -118,7 +118,7 @@ def train_conv_net(datasets,
     n_batches = new_data.shape[0]/batch_size
     n_train_batches = int(np.round(n_batches*0.9))
     #divide train set into train/val sets 
-    test_set_x = datasets[1][:,:img_h] 
+    test_set_x = np.asarray(datasets[1][:,:img_h], "float32") 
     test_set_y = np.asarray(datasets[1][:,-1],"int32")
     train_set = new_data[:n_train_batches*batch_size,:]
     val_set = new_data[n_train_batches*batch_size:,:]     
@@ -129,7 +129,9 @@ def train_conv_net(datasets,
          givens={
             x: val_set_x[index * batch_size: (index + 1) * batch_size],
             y: val_set_y[index * batch_size: (index + 1) * batch_size]})
-            
+    
+    print('... compiling')
+        
     #compile theano functions to get train/val/test errors
     test_model = theano.function([index], classifier.errors(y),
              givens={
@@ -280,12 +282,14 @@ def make_idx_data_cv(revs, word_idx_map, cv, max_l=51, k=300, filter_h=5):
   
    
 if __name__=="__main__":
-    print "loading data...",
-    x = cPickle.load(open("mr.p","rb"))
-    revs, W, W2, word_idx_map, vocab = x[0], x[1], x[2], x[3], x[4]
-    print "data loaded!"
     mode= sys.argv[1]
-    word_vectors = sys.argv[2]    
+    embedding_file = sys.argv[2] 
+    #word_vectors = sys.argv[2]
+    
+    print "loading data...",
+    x = cPickle.load(open(embedding_file,"rb"))
+    revs, W, dim, word_idx_map, vocab = x[0], x[1], x[2], x[3], x[4]
+    print "data loaded!"    
     if mode=="-nonstatic":
         print "model architecture: CNN-non-static"
         non_static=True
@@ -293,18 +297,22 @@ if __name__=="__main__":
         print "model architecture: CNN-static"
         non_static=False
     execfile("conv_net_classes.py")    
+    U = W
+    '''
     if word_vectors=="-rand":
         print "using: random vectors"
         U = W2
     elif word_vectors=="-word2vec":
         print "using: word2vec vectors"
         U = W
+    '''
     results = []
     r = range(0,10)    
     for i in r:
-        datasets = make_idx_data_cv(revs, word_idx_map, i, max_l=56,k=300, filter_h=5)
+        datasets = make_idx_data_cv(revs, word_idx_map, i, max_l=56, k=dim, filter_h=5)
         perf = train_conv_net(datasets,
                               U,
+                              img_w=dim,
                               lr_decay=0.95,
                               filter_hs=[3,4,5],
                               conv_non_linear="relu",

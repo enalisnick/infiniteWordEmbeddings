@@ -9,6 +9,9 @@ from scipy import spatial
 from math import log, pow, exp
 import getopt
 
+from Evaluation.eval_lib import read_embedding_file 
+
+"""
 ### Get vocab and word-embeddings from file 
 def read_embedding_file(embedding_filename):
   ### READ EMBEDDINGS FROM TXT FILE
@@ -20,7 +23,7 @@ def read_embedding_file(embedding_filename):
       vocab.append(line[0])
       embeddings.append([float(x) for x in line[1:]])
   return vocab, embeddings  
-
+"""
 def compute_unnorm_z_probs_recursively(in_vec, out_vec, max_dim, sparsity_weight, dim_penalty):
     z_probs = np.zeros(max_dim)
     for idx1 in xrange(max_dim):
@@ -76,16 +79,16 @@ def perform_word_sim_task(vocab, input_embeddings, context_embeddings, sparsity,
         w2_embeddings.append(context_embeddings[word2_idx])
       except ValueError:
         continue
-
+  
   for idx,v1 in enumerate(w1_embeddings):
     p_z_w_c = compute_p_z_given_w_c(v1, w2_embeddings[idx], sparsity, dim_penalty)
     temp_sum = 0.0
     temp_prod = 0.0
     for dim_idx, z_weight in enumerate(p_z_w_c): 
-      #print z_weight
       temp_prod += v1[dim_idx]*w2_embeddings[idx][dim_idx]
       temp_sum += z_weight * temp_prod
     model_sims.append(temp_sum)
+  
   outF.write("Spearman's Rank Correlation: %.4f \n\n" %(compute_spearman_rank(human_sims, model_sims)))
   outF.flush()
 
@@ -100,11 +103,12 @@ def process_embeddings_dir(rootDir):
     iSG = 'iSG_'
     iCBOW = 'iCBOW_'
     for file in files:
-      file = file.lower()
-      if iSG.lower() in file:  
-        roots.append((iSG, file.split('_vecs_')[1].split('.txt')[0]))
-      if iCBOW.lower() in file:
-        roots.append((iCBOW, file.split('_vecs_')[1].split('.txt')[0])) 
+      if '.txt' in file:
+        file = file.lower()
+        if iSG.lower() in file:  
+          roots.append((iSG, file.split('_vecs_')[1].split('.txt')[0]))
+        if iCBOW.lower() in file:
+          roots.append((iCBOW, file.split('_vecs_')[1].split('.txt')[0])) 
     roots = set(roots)
     for prefix,root in roots:
         sparsity = float(root.split('_')[0])
@@ -122,8 +126,8 @@ if __name__ == '__main__':
     sparsity = 0.0
     dim_penalty = 0.0
     sim_files = {}
-    sim_files['wordsim353'] = '../Evaluation/sim-tasks/wordSim353_sorted.csv'
-    sim_files['MEN'] = '../Evaluation/sim-tasks/MEN_sorted.txt'
+    sim_files['wordsim353'] = 'Evaluation/sim-tasks/wordSim353_sorted.csv'
+    sim_files['MEN'] = 'Evaluation/sim-tasks/MEN_sorted.txt'
     rootDir = ""
     outputFile = ""
     help_message = 'auto_eval_iSG.py -r <path to directory containing embedding files> -o <name of output file>'
@@ -153,10 +157,10 @@ if __name__ == '__main__':
         outF.write('Sparsity penalty: %.8f \n' %(sparsity))
         outF.write('Dimension penalty: %.2f \n\n' %(dim_penalty))
         outF.flush()
-        vocab, in_embeddings = read_embedding_file(rootDir+input_embedding_file)
+        vocab, in_embeddings = read_embedding_file(input_embedding_file)
         #in_vocab = in_vocab[:k]
         #in_embeddings = in_embeddings[:k]
-        _, out_embeddings = read_embedding_file(rootDir+context_embedding_file)
+        _, out_embeddings = read_embedding_file(context_embedding_file)
         #out_vocab = out_vocab[:k]
         #out_embeddings = out_embeddings[:k]
 

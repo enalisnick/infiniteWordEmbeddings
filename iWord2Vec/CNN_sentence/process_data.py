@@ -52,8 +52,8 @@ def get_W(word_vecs, k=300):
     """
     vocab_size = len(word_vecs)
     word_idx_map = dict()
-    W = np.zeros(shape=(vocab_size+1, k))            
-    W[0] = np.zeros(k)
+    W = np.zeros(shape=(vocab_size+1, k), dtype='float32')            
+    W[0] = np.zeros(k, dtype='float32')
     i = 1
     for word in word_vecs:
         W[i] = word_vecs[word]
@@ -82,8 +82,22 @@ def load_bin_vec(fname, vocab):
             if word in vocab:
                word_vecs[word] = np.fromstring(f.read(binary_len), dtype='float32')  
             else:
-                f.read(binary_len)
+               f.read(binary_len)
     return word_vecs
+
+def read_embedding_file(fname, vocab):
+   """
+   Load vectors from our iw2v and w2v embedding files
+   """
+   word_vecs = {}
+   with open(fname) as f:
+    for line in f.readlines()[1:]:
+      line = line.strip().split()
+      word = line[0]
+      if word in vocab:
+        word_vecs[word] = [float(x) for x in line[1:]]
+   
+   return word_vecs
 
 def add_unknown_words(word_vecs, vocab, min_df=1, k=300):
     """
@@ -123,7 +137,11 @@ def clean_str_sst(string):
     return string.strip().lower()
 
 if __name__=="__main__":    
-    w2v_file = sys.argv[1]     
+    if len(sys.argv) > 1:
+      embedding_file = sys.argv[1]     
+    else:
+      embedding_file = None
+  
     data_folder = ["rt-polarity.pos","rt-polarity.neg"]    
     print "loading data...",        
     revs, vocab = build_data_cv(data_folder, cv=10, clean_string=True)
@@ -133,14 +151,23 @@ if __name__=="__main__":
     print "vocab size: " + str(len(vocab))
     print "max sentence length: " + str(max_l)
     print "loading word2vec vectors...",
-    w2v = load_bin_vec(w2v_file, vocab)
-    print "word2vec loaded!"
-    print "num words already in word2vec: " + str(len(w2v))
-    add_unknown_words(w2v, vocab)
-    W, word_idx_map = get_W(w2v)
-    rand_vecs = {}
-    add_unknown_words(rand_vecs, vocab)
-    W2, _ = get_W(rand_vecs)
-    cPickle.dump([revs, W, W2, word_idx_map, vocab], open("mr.p", "wb"))
+    
+    if embedding_file is not None: 
+      w2v = read_embedding_file(embedding_file, vocab)
+      dim = len(w2v.values()[0])
+      print "word2vec loaded with dim: ", dim
+      print "num words already in word2vec: " + str(len(w2v))
+      add_unknown_words(w2v, vocab, k=dim)
+      W, word_idx_map = get_W(w2v, dim)
+      filename = embedding_file.replace('.txt', '')
+    else:
+      print "writing random embedding file"
+      dim = 100
+      rand_vecs = {}
+      add_unknown_words(rand_vecs, vocab, k=dim)
+      W, word_idx_map = get_W(rand_vecs, dim)
+      filename = 'rand'
+
+    cPickle.dump([revs, W, dim, word_idx_map, vocab], open(filename + "_conv.p", "wb"))
     print "dataset created!"
     
