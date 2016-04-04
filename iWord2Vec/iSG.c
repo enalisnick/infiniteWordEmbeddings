@@ -342,12 +342,11 @@ void InitNet() {
       }
   }
 
-  if (learning_rate_flag != 3){
-    // initialize per dimension learning rate array
-    alpha_per_dim = (real *) calloc(embed_max_size, sizeof(real));
-    for (b = 0; b < embed_max_size; b++) alpha_per_dim[b] = alpha;
-    alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
-  } else {
+  // initialize per dimension learning rate array
+  alpha_per_dim = (real *) calloc(embed_max_size, sizeof(real));
+  for (b = 0; b < embed_max_size; b++) alpha_per_dim[b] = alpha;
+  alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
+  if (learning_rate_flag == 3) {
     input_grad_moment1 = calloc(vocab_size * embed_max_size, sizeof(float)); 
     context_grad_moment1 = calloc(vocab_size * embed_max_size, sizeof(float));
     input_grad_moment2 = calloc(vocab_size * embed_max_size, sizeof(float)); 
