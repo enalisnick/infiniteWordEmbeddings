@@ -44,8 +44,15 @@ int num_z_samples = 5;
 float temperature = 1.0;
 
 // learning rate variables
-int learning_rate_flag = 0; // 0 for regular SGD, 1 for per dimension, 2 for beta cdf sweeps
+int learning_rate_flag = 0; // 0 for regular SGD, 1 for per dimension, 2 for beta cdf sweeps, 3 for AdaM
 int M = 0.0; // training proportion * current embedding size
+
+// AdaM variables
+float *input_grad_moment1, *context_grad_moment1, *input_grad_moment2, *context_grad_moment2, *input_adam_update_counter, *context_adam_update_counter;
+float alpha_adam = 0.001; // learning rate
+float epsilon_adam = 0.00000001; // denominator padding
+float b1_adam = 0.95; // geo avg for moment1
+float b2_adam = 0.999; // geo avg for moment2
 
 const int table_size = 1e8;
 const double epsilon = 1e-8;
@@ -335,10 +342,19 @@ void InitNet() {
       }
   }
 
-  // initialize per dimension learning rate array
-  alpha_per_dim = (real *) calloc(embed_max_size, sizeof(real));
-  for (b = 0; b < embed_max_size; b++) alpha_per_dim[b] = alpha;
-  alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
+  if (learning_rate_flag != 3){
+    // initialize per dimension learning rate array
+    alpha_per_dim = (real *) calloc(embed_max_size, sizeof(real));
+    for (b = 0; b < embed_max_size; b++) alpha_per_dim[b] = alpha;
+    alpha_count_adjustment = (long long *) calloc(embed_max_size, sizeof(long long));
+  } else {
+    input_grad_moment1 = calloc(vocab_size * embed_max_size, sizeof(float)); 
+    context_grad_moment1 = calloc(vocab_size * embed_max_size, sizeof(float));
+    input_grad_moment2 = calloc(vocab_size * embed_max_size, sizeof(float)); 
+    context_grad_moment2 = calloc(vocab_size * embed_max_size, sizeof(float));
+    input_adam_update_counter = calloc(vocab_size * embed_max_size, sizeof(float));
+    context_adam_update_counter = calloc(vocab_size * embed_max_size, sizeof(float));
+  }
 }
 
 /*
@@ -502,6 +518,7 @@ void print_args() {
   printf("Training iterations (epochs): %lld\n", iter);
   if (learning_rate_flag == 1) printf("\tOptimization type: per-dimension learning rate\n");
   else if (learning_rate_flag == 2) printf("\tOptimization type: Beta CDF sweeping.\n");
+  else if (learning_rate_flag == 3) printf("\tOptimization type: AdaM.\n");
   else printf("\tOptimization type: vanilla SGD.  No special per-dimension learning.\n");
   printf("Base learning rate: %f\n", (float)alpha ); 
   printf("Dimension penalty: %f\n", (float)dim_penalty); 
@@ -574,7 +591,7 @@ void *TrainModelThread(void *thread_id) {
           if (alpha_per_dim[c] < starting_alpha * 0.0001) alpha_per_dim[c] = starting_alpha * 0.0001;
         }
       }
-      else if (learning_rate_flag == 2 || learning_rate_flag == 3) M = (int)((word_count_actual / (real)(iter * train_words + 1)) * embed_current_size);
+      else if (learning_rate_flag == 2) M = (int)((word_count_actual / (real)(iter * train_words + 1)) * embed_current_size);
       if ((debug_mode > 1)) {
         now=clock();
 	float lr = alpha;
@@ -737,8 +754,19 @@ void *TrainModelThread(void *thread_id) {
 	    if (learning_rate_flag == 1) lr = alpha_per_dim[j];
 	    else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P((j+1.0)/(embed_current_size+1), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
 	    check_value((sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad), "neg context gradient", j);
-	    context_embed[context_idx + j] -= lr * (1.0/temperature) 
-              * (sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad);
+	    if (learning_rate_flag != 3){
+	      context_embed[context_idx + j] -= lr * (1.0/temperature) * (sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad);
+	    } else {
+	      float g_t = (1.0/temperature) * (sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * context_E_grad);
+	      context_adam_update_counter[context_idx + j] += 1;
+	      float m_t = (b1_adam * context_grad_moment1[context_idx + j]) + (1 - b1_adam) * g_t;
+	      float v_t = (b2_adam * context_grad_moment2[context_idx + j]) + (1 - b2_adam) * g_t*g_t;
+	      float m_t_hat = m_t / (1. - pow(b1_adam, context_adam_update_counter[context_idx + j]));
+	      float v_t_hat = v_t / (1. - pow(b2_adam, context_adam_update_counter[context_idx + j]));
+	      context_embed[context_idx + j] -= alpha_adam * m_t_hat / (sqrt(v_t_hat) + epsilon_adam);
+	      context_grad_moment1[context_idx + j] = m_t;
+	      context_grad_moment2[context_idx + j] = v_t;
+	    }
 	  }
 	  // input_grad_accum just has the normalization grad in it
 	  input_gradient_accumulator[j] += sum_prob_c_z_given_w[d*local_embed_size_plus_one + j] * input_word_E_grad;
@@ -751,10 +779,33 @@ void *TrainModelThread(void *thread_id) {
 	if (learning_rate_flag == 1) lr = alpha_per_dim[j];
 	else if (learning_rate_flag == 2) lr = alpha * gsl_cdf_beta_P((j+1.0)/(embed_current_size+1), (M+0.01)/embed_current_size, (embed_current_size - M + 0.01)/embed_current_size);
 	check_value(input_gradient[j], "input_gradient", j);
-        input_gradient[j] += input_gradient_accumulator[j]; 
-	input_embed[input_word_position + j] -= lr * (1.0/temperature) * input_gradient[j];
 	check_value(pos_context_gradient[j], "pos_context_gradient", j);
-        context_embed[context_word_position + j] -= lr * (1.0/temperature) * pos_context_gradient[j];
+        input_gradient[j] += input_gradient_accumulator[j]; 
+	if (learning_rate_flag != 3){
+	  input_embed[input_word_position + j] -= lr * (1.0/temperature) * input_gradient[j];
+	  context_embed[context_word_position + j] -= lr * (1.0/temperature) * pos_context_gradient[j];
+	} else {
+	  // update input embedding
+	  float g_t = (1.0/temperature) * input_gradient[j];
+	  input_adam_update_counter[input_word_position + j] += 1;
+	  float m_t = (b1_adam * input_grad_moment1[input_word_position + j]) + (1 - b1_adam) * g_t;
+	  float v_t = (b2_adam * input_grad_moment2[input_word_position + j]) + (1 - b2_adam) * g_t*g_t;
+	  float m_t_hat = m_t / (1. - pow(b1_adam, input_adam_update_counter[input_word_position + j]));
+	  float v_t_hat = v_t / (1. - pow(b2_adam, input_adam_update_counter[input_word_position + j]));
+	  input_embed[input_word_position + j] -= alpha_adam * m_t_hat / (sqrt(v_t_hat) + epsilon_adam);
+	  input_grad_moment1[input_word_position + j] = m_t;
+	  input_grad_moment2[input_word_position + j] = v_t;
+	  // update context embedding
+	  g_t = (1.0/temperature) * pos_context_gradient[j];
+	  context_adam_update_counter[context_word_position + j] += 1;
+	  m_t = (b1_adam * context_grad_moment1[context_word_position + j]) + (1 - b1_adam) * g_t;
+	  v_t = (b2_adam * context_grad_moment2[context_word_position + j]) + (1 - b2_adam) * g_t*g_t;
+	  m_t_hat = m_t / (1. - pow(b1_adam, context_adam_update_counter[context_word_position + j]));
+	  v_t_hat = v_t / (1. - pow(b2_adam, context_adam_update_counter[context_word_position + j]));
+	  context_embed[context_word_position + j] -= alpha_adam * m_t_hat / (sqrt(v_t_hat) + epsilon_adam);
+	  context_grad_moment1[context_word_position + j] = m_t;
+	  context_grad_moment2[context_word_position + j] = v_t;
+	}
       }
 
       // track training progress
@@ -821,6 +872,12 @@ void TrainModel() {
   free(alpha_per_dim);
   free(input_embed);
   free(context_embed);
+  free(input_grad_moment1);
+  free(context_grad_moment1);
+  free(input_grad_moment2);
+  free(context_grad_moment2);
+  free(input_adam_update_counter);
+  free(context_adam_update_counter);
  
   // Print end time
   now = time (0);                                                               
