@@ -1,0 +1,18 @@
+Evaluating embedding files in directory: /Users/enalisnick/Desktop/ 
+
+#####################################################
+Input embeddings file: iCBOW_w_vecs_1e-6_1.06_0.07_fullwiki.txt 
+Context embeddings file: iCBOW_c_vecs_1e-6_1.06_0.07_fullwiki.txt 
+Sparsity penalty: 0.00000100 
+Dimension penalty: 1.06 
+
+Evaluating on wordsim353 task
+Spearman's Rank Correlation: 0.5787 
+
+
+
+Evaluating on MEN task
+Spearman's Rank Correlation: 0.6482 
+
+
+
